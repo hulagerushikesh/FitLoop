@@ -278,38 +278,50 @@ export default function LogMealScreen({ navigation, route }: Props) {
               <Text style={styles.label}>{mode === 'manual' ? 'Food details' : 'Estimated — edit if needed'}</Text>
               <TextField placeholder="Name" value={name} onChangeText={setName} />
               <View style={styles.macroRow}>
-                <TextInput
-                  style={styles.macroInput}
-                  placeholder="kcal"
-                  placeholderTextColor={COLORS.textTertiary}
-                  keyboardType="number-pad"
-                  value={calories}
-                  onChangeText={setCalories}
-                />
-                <TextInput
-                  style={styles.macroInput}
-                  placeholder="protein g"
-                  placeholderTextColor={COLORS.textTertiary}
-                  keyboardType="decimal-pad"
-                  value={protein}
-                  onChangeText={setProtein}
-                />
-                <TextInput
-                  style={styles.macroInput}
-                  placeholder="carbs g"
-                  placeholderTextColor={COLORS.textTertiary}
-                  keyboardType="decimal-pad"
-                  value={carbs}
-                  onChangeText={setCarbs}
-                />
-                <TextInput
-                  style={styles.macroInput}
-                  placeholder="fat g"
-                  placeholderTextColor={COLORS.textTertiary}
-                  keyboardType="decimal-pad"
-                  value={fat}
-                  onChangeText={setFat}
-                />
+                <View style={styles.macroField}>
+                  <Text style={styles.macroFieldLabel}>Kcal</Text>
+                  <TextInput
+                    style={styles.macroInput}
+                    placeholder="0"
+                    placeholderTextColor={COLORS.textTertiary}
+                    keyboardType="number-pad"
+                    value={calories}
+                    onChangeText={setCalories}
+                  />
+                </View>
+                <View style={styles.macroField}>
+                  <Text style={styles.macroFieldLabel}>Protein (g)</Text>
+                  <TextInput
+                    style={styles.macroInput}
+                    placeholder="0"
+                    placeholderTextColor={COLORS.textTertiary}
+                    keyboardType="decimal-pad"
+                    value={protein}
+                    onChangeText={setProtein}
+                  />
+                </View>
+                <View style={styles.macroField}>
+                  <Text style={styles.macroFieldLabel}>Carbs (g)</Text>
+                  <TextInput
+                    style={styles.macroInput}
+                    placeholder="0"
+                    placeholderTextColor={COLORS.textTertiary}
+                    keyboardType="decimal-pad"
+                    value={carbs}
+                    onChangeText={setCarbs}
+                  />
+                </View>
+                <View style={styles.macroField}>
+                  <Text style={styles.macroFieldLabel}>Fat (g)</Text>
+                  <TextInput
+                    style={styles.macroInput}
+                    placeholder="0"
+                    placeholderTextColor={COLORS.textTertiary}
+                    keyboardType="decimal-pad"
+                    value={fat}
+                    onChangeText={setFat}
+                  />
+                </View>
               </View>
 
               <Pressable style={styles.checkboxRow} onPress={() => setSaveAsMeal((v) => !v)}>
@@ -348,8 +360,16 @@ const styles = StyleSheet.create({
   modeButtonTextActive: { color: COLORS.accentText },
   label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: SPACING.md, textTransform: 'uppercase' },
   macroRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm, marginBottom: SPACING.md },
+  macroField: { flex: 1, minWidth: 0 },
+  macroFieldLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
   macroInput: {
-    flex: 1,
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surface,

@@ -1,8 +1,25 @@
 import { supabase } from './supabase';
-import type { FoodLog, FoodLogSource, Meal, MealType } from '../types/database';
+import type { DailySummary, FoodLog, FoodLogSource, Meal, MealType } from '../types/database';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/** Daily calorie/macro totals for the last `days` days (most recent first), for the Nutrition history view. */
+export async function fetchRecentSummary(userId: string, days: number = 30): Promise<DailySummary[]> {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - (days - 1));
+  const startDate = start.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('daily_summary')
+    .select('*')
+    .eq('user_id', userId)
+    .gte('day', startDate)
+    .order('day', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as DailySummary[];
 }
 
 export async function fetchDailyLogs(userId: string, date: string = today()): Promise<FoodLog[]> {

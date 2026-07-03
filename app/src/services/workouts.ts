@@ -178,6 +178,38 @@ export async function startSession(
   return data as WorkoutSession;
 }
 
+/**
+ * The unfinished session (if any) for this workout started today. Reused
+ * instead of creating a new session on every screen mount, which would
+ * otherwise leave a trail of duplicate empty sessions if the user
+ * navigates away and back without finishing (e.g. via the back button).
+ */
+export async function fetchActiveSession(userId: string, workoutId: string): Promise<WorkoutSession | null> {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('workout_sessions')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('workout_id', workoutId)
+    .eq('session_date', today)
+    .is('ended_at', null)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as WorkoutSession | null) ?? null;
+}
+
+export async function fetchSessionLogs(sessionId: string): Promise<WorkoutLog[]> {
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('set_number', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as WorkoutLog[];
+}
+
 export async function finishSession(
   sessionId: string,
   caloriesBurned: number

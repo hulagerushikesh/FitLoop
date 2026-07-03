@@ -47,12 +47,12 @@ export const RADIUS = {
 } as const;
 
 export const TYPOGRAPHY = {
-  display: { fontSize: 40, fontWeight: '800' as const, letterSpacing: -0.5 },
-  h1: { fontSize: 28, fontWeight: '800' as const, letterSpacing: -0.3 },
-  h2: { fontSize: 22, fontWeight: '700' as const },
-  h3: { fontSize: 17, fontWeight: '700' as const },
-  body: { fontSize: 15, fontWeight: '500' as const },
-  bodyBold: { fontSize: 15, fontWeight: '700' as const },
-  caption: { fontSize: 13, fontWeight: '500' as const },
-  label: { fontSize: 12, fontWeight: '700' as const, letterSpacing: 0.4 },
+  display: { fontSize: 48, fontWeight: '800' as const, letterSpacing: -0.5, lineHeight: 52 },
+  h1: { fontSize: 32, fontWeight: '800' as const, letterSpacing: -0.3, lineHeight: 38 },
+  h2: { fontSize: 24, fontWeight: '700' as const, lineHeight: 30 },
+  h3: { fontSize: 19, fontWeight: '700' as const, lineHeight: 24 },
+  body: { fontSize: 16, fontWeight: '500' as const, lineHeight: 22 },
+  bodyBold: { fontSize: 16, fontWeight: '700' as const, lineHeight: 22 },
+  caption: { fontSize: 14, fontWeight: '500' as const, lineHeight: 19 },
+  label: { fontSize: 12.5, fontWeight: '800' as const, letterSpacing: 0.5, lineHeight: 16 },
 } as const;

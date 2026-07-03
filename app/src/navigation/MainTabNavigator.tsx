@@ -5,10 +5,8 @@ import type { MainTabParamList } from './types';
 import HomeStackNavigator from './HomeStackNavigator';
 import NutritionStackNavigator from './NutritionStackNavigator';
 import WorkoutsStackNavigator from './WorkoutsStackNavigator';
-import CalendarStackNavigator from './CalendarStackNavigator';
-import AnalyticsStackNavigator from './AnalyticsStackNavigator';
 import ProfileStackNavigator from './ProfileStackNavigator';
-import { COLORS } from '../theme/theme';
+import { COLORS, SPACING } from '../theme/theme';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -16,8 +14,6 @@ const TAB_ICONS: Record<keyof MainTabParamList, keyof typeof Ionicons.glyphMap> 
   Home: 'home',
   Nutrition: 'restaurant',
   Workouts: 'barbell',
-  Calendar: 'calendar',
-  Analytics: 'stats-chart',
   Profile: 'person',
 };
 
@@ -31,19 +27,20 @@ export default function MainTabNavigator() {
         tabBarStyle: {
           backgroundColor: COLORS.surface,
           borderTopColor: COLORS.border,
+          height: 68,
+          paddingTop: SPACING.sm,
+          paddingBottom: SPACING.sm,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '700', marginTop: 2 },
         tabBarIcon: ({ color, size, focused }) => {
           const name = TAB_ICONS[route.name as keyof MainTabParamList];
-          return <Ionicons name={focused ? name : (`${name}-outline` as keyof typeof Ionicons.glyphMap)} size={size} color={color} />;
+          return <Ionicons name={focused ? name : (`${name}-outline` as keyof typeof Ionicons.glyphMap)} size={size + 2} color={color} />;
         },
       })}
     >
       <Tab.Screen name="Home" component={HomeStackNavigator} />
       <Tab.Screen name="Nutrition" component={NutritionStackNavigator} />
       <Tab.Screen name="Workouts" component={WorkoutsStackNavigator} />
-      <Tab.Screen name="Calendar" component={CalendarStackNavigator} />
-      <Tab.Screen name="Analytics" component={AnalyticsStackNavigator} />
       <Tab.Screen name="Profile" component={ProfileStackNavigator} />
     </Tab.Navigator>
   );

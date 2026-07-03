@@ -19,6 +19,8 @@ import {
   fetchRoutine,
   fetchRoutineExercises,
   fetchLastSessionSets,
+  fetchActiveSession,
+  fetchSessionLogs,
   startSession,
   logSet,
   finishSession,
@@ -104,30 +106,39 @@ function ExerciseLogCard({
       ))}
 
       <View style={styles.inputRow}>
-        <TextInput
-          style={styles.setInput}
-          placeholder="kg"
-          placeholderTextColor={COLORS.textTertiary}
-          keyboardType="decimal-pad"
-          value={weight}
-          onChangeText={setWeight}
-        />
-        <TextInput
-          style={styles.setInput}
-          placeholder="reps"
-          placeholderTextColor={COLORS.textTertiary}
-          keyboardType="number-pad"
-          value={reps}
-          onChangeText={setReps}
-        />
-        <TextInput
-          style={styles.setInput}
-          placeholder="RPE"
-          placeholderTextColor={COLORS.textTertiary}
-          keyboardType="decimal-pad"
-          value={rpe}
-          onChangeText={setRpe}
-        />
+        <View style={styles.setField}>
+          <Text style={styles.setFieldLabel}>Kg</Text>
+          <TextInput
+            style={styles.setInput}
+            placeholder="0"
+            placeholderTextColor={COLORS.textTertiary}
+            keyboardType="decimal-pad"
+            value={weight}
+            onChangeText={setWeight}
+          />
+        </View>
+        <View style={styles.setField}>
+          <Text style={styles.setFieldLabel}>Reps</Text>
+          <TextInput
+            style={styles.setInput}
+            placeholder="0"
+            placeholderTextColor={COLORS.textTertiary}
+            keyboardType="number-pad"
+            value={reps}
+            onChangeText={setReps}
+          />
+        </View>
+        <View style={styles.setField}>
+          <Text style={styles.setFieldLabel}>RPE</Text>
+          <TextInput
+            style={styles.setInput}
+            placeholder="0"
+            placeholderTextColor={COLORS.textTertiary}
+            keyboardType="decimal-pad"
+            value={rpe}
+            onChangeText={setRpe}
+          />
+        </View>
         <Pressable
           style={[styles.logButton, (!weight || !reps) && styles.logButtonDisabled]}
           disabled={!weight || !reps}
@@ -168,16 +179,28 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
       setRoutineExercises(exercises);
       setBodyWeightKg(weight);
 
-      const newSession = await startSession(user.id, workoutId, routine.name);
-      setSession(newSession);
+      const activeSession = await fetchActiveSession(user.id, workoutId);
+      const currentSession = activeSession ?? (await startSession(user.id, workoutId, routine.name));
+      setSession(currentSession);
 
-      const lastSetsEntries = await Promise.all(
-        exercises.map(async (re) => [
-          re.exercise.id,
-          await fetchLastSessionSets(user.id, re.exercise.id, newSession.id),
-        ] as const)
-      );
+      const [lastSetsEntries, resumedLogs] = await Promise.all([
+        Promise.all(
+          exercises.map(async (re) => [
+            re.exercise.id,
+            await fetchLastSessionSets(user.id, re.exercise.id, currentSession.id),
+          ] as const)
+        ),
+        activeSession ? fetchSessionLogs(activeSession.id) : Promise.resolve([]),
+      ]);
       setLastSetsByExercise(Object.fromEntries(lastSetsEntries));
+
+      if (resumedLogs.length > 0) {
+        const grouped: Record<string, LoggedSet[]> = {};
+        for (const log of resumedLogs) {
+          (grouped[log.exercise_id] ??= []).push({ weight_kg: log.weight_kg, reps: log.reps, rpe: log.rpe });
+        }
+        setLoggedSets(grouped);
+      }
     })()
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to start session'))
       .finally(() => setLoading(false));
@@ -283,9 +306,17 @@ const styles = StyleSheet.create({
   suggestionRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: SPACING.xs },
   suggestion: { ...TYPOGRAPHY.caption, color: COLORS.accent, fontWeight: '700' },
   loggedSet: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, marginTop: SPACING.xs },
-  inputRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md, alignItems: 'center' },
+  inputRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md, alignItems: 'flex-end' },
+  setField: { flex: 1, minWidth: 0 },
+  setFieldLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
   setInput: {
-    flex: 1,
     borderWidth: 1,
     borderColor: COLORS.border,
     backgroundColor: COLORS.surfaceHigh,

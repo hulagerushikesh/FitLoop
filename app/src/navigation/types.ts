@@ -1,3 +1,5 @@
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
@@ -16,6 +18,7 @@ export type HomeStackParamList = {
 export type NutritionStackParamList = {
   NutritionHome: undefined;
   LogMeal: { mode?: 'manual' | 'text' | 'photo' | 'saved' } | undefined;
+  NutritionHistory: undefined;
 };
 
 export type WorkoutsStackParamList = {
@@ -26,23 +29,15 @@ export type WorkoutsStackParamList = {
   WorkoutSession: { workoutId: string };
 };
 
-export type CalendarStackParamList = {
-  CalendarMain: undefined;
-};
-
-export type AnalyticsStackParamList = {
-  AnalyticsMain: undefined;
-};
-
 export type ProfileStackParamList = {
   ProfileMain: undefined;
+  CalendarMain: undefined;
+  AnalyticsMain: undefined;
 };
 
 export type MainTabParamList = {
   Home: undefined;
-  Nutrition: undefined;
-  Workouts: undefined;
-  Calendar: undefined;
-  Analytics: undefined;
-  Profile: undefined;
+  Nutrition: NavigatorScreenParams<NutritionStackParamList> | undefined;
+  Workouts: NavigatorScreenParams<WorkoutsStackParamList> | undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList> | undefined;
 };

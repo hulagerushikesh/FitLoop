@@ -3,11 +3,10 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchMonthSummary, fetchSessionsForDate } from '../../services/calendar';
-import { fetchDailyLogs } from '../../services/nutrition';
 import ScreenContainer from '../../components/ScreenContainer';
 import Card from '../../components/Card';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
-import type { DailySummary, FoodLog, WorkoutSession } from '../../types/database';
+import type { DailySummary, WorkoutSession } from '../../types/database';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -56,7 +55,6 @@ export default function CalendarScreen() {
   const [summaries, setSummaries] = useState<Record<string, DailySummary>>({});
   const [loadingMonth, setLoadingMonth] = useState(true);
   const [selectedDate, setSelectedDate] = useState(today);
-  const [dayLogs, setDayLogs] = useState<FoodLog[]>([]);
   const [daySessions, setDaySessions] = useState<WorkoutSession[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(true);
 
@@ -71,11 +69,8 @@ export default function CalendarScreen() {
   useEffect(() => {
     if (!user) return;
     setLoadingDetail(true);
-    Promise.all([fetchDailyLogs(user.id, selectedDate), fetchSessionsForDate(user.id, selectedDate)])
-      .then(([logs, sessions]) => {
-        setDayLogs(logs);
-        setDaySessions(sessions);
-      })
+    fetchSessionsForDate(user.id, selectedDate)
+      .then(setDaySessions)
       .finally(() => setLoadingDetail(false));
   }, [user, selectedDate]);
 
@@ -187,18 +182,7 @@ export default function CalendarScreen() {
               ) : (
                 daySessions.map((s) => (
                   <Text key={s.id} style={styles.detailListItem}>
-                    {s.name} — {s.calories_burned ?? '—'} kcal
-                  </Text>
-                ))
-              )}
-
-              <Text style={styles.detailSubtitle}>Food</Text>
-              {dayLogs.length === 0 ? (
-                <Text style={styles.detailEmpty}>No food logged</Text>
-              ) : (
-                dayLogs.map((l) => (
-                  <Text key={l.id} style={styles.detailListItem}>
-                    {l.name} — {l.calories} kcal
+                    {s.name}
                   </Text>
                 ))
               )}

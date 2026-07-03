@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
@@ -48,6 +48,16 @@ export default function NutritionHomeScreen({ navigation }: Props) {
       load();
     }, [load])
   );
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable onPress={() => navigation.navigate('NutritionHistory')} hitSlop={8} style={styles.historyButton}>
+          <Ionicons name="time-outline" size={22} color={COLORS.textPrimary} />
+        </Pressable>
+      ),
+    });
+  }, [navigation]);
 
   const totals = useMemo(
     () =>
@@ -174,5 +184,6 @@ const styles = StyleSheet.create({
   logMacros: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 },
   deleteButton: { padding: SPACING.sm },
   logButtonWrap: { position: 'absolute', bottom: SPACING.xl, left: SPACING.lg, right: SPACING.lg },
+  historyButton: { padding: SPACING.xs },
   error: { color: COLORS.danger, marginBottom: SPACING.md, ...TYPOGRAPHY.caption },
 });

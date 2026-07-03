@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
 import { updateProfile, fetchLatestWeight, logWeight } from '../../services/profile';
@@ -17,10 +19,13 @@ import {
   RATE_BOUNDS,
   formatRate,
 } from '../../constants/profileOptions';
-import { COLORS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
 import type { ActivityLevel, GoalType, Goal, Sex } from '../../types/database';
+import type { ProfileStackParamList } from '../../navigation/types';
 
-export default function ProfileScreen() {
+type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
+
+export default function ProfileScreen({ navigation }: Props) {
   const { user, signOut } = useAuth();
   const { profile, refresh } = useProfile();
 
@@ -101,6 +106,30 @@ export default function ProfileScreen() {
             </Card>
           ) : null}
 
+          <Card style={styles.menuCard}>
+            <Pressable
+              style={styles.menuRow}
+              onPress={() => navigation.navigate('CalendarMain')}
+            >
+              <View style={styles.menuIconWrap}>
+                <Ionicons name="calendar" size={18} color={COLORS.accent} />
+              </View>
+              <Text style={styles.menuLabel}>Calendar</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+            </Pressable>
+            <View style={styles.menuDivider} />
+            <Pressable
+              style={styles.menuRow}
+              onPress={() => navigation.navigate('AnalyticsMain')}
+            >
+              <View style={styles.menuIconWrap}>
+                <Ionicons name="stats-chart" size={18} color={COLORS.accent} />
+              </View>
+              <Text style={styles.menuLabel}>Analytics</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+            </Pressable>
+          </Card>
+
           <Text style={styles.section}>Basics</Text>
           <Text style={styles.label}>Sex</Text>
           <OptionPicker options={SEX_OPTIONS} selected={sex} onSelect={setSex} />
@@ -149,6 +178,18 @@ const styles = StyleSheet.create({
   targetCalories: { fontSize: 28, fontWeight: '800', color: COLORS.accent, marginTop: SPACING.xs },
   targetMacros: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, marginTop: SPACING.xs },
   targetReason: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: SPACING.sm, fontStyle: 'italic' },
+  menuCard: { padding: 0, marginBottom: SPACING.lg, overflow: 'hidden' },
+  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md + 2, paddingHorizontal: SPACING.lg, gap: SPACING.md },
+  menuIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.accentMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuLabel: { ...TYPOGRAPHY.bodyBold, color: COLORS.textPrimary, flex: 1 },
+  menuDivider: { height: 1, backgroundColor: COLORS.border, marginLeft: SPACING.lg + 34 + SPACING.md },
   section: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginTop: SPACING.xl, marginBottom: SPACING.md },
   label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: SPACING.md, textTransform: 'uppercase' },
   saveButton: { marginTop: SPACING.xl },

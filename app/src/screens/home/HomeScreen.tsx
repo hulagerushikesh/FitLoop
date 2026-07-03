@@ -10,31 +10,36 @@ import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
 import { fetchDailyLogs } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
+import { fetchRoutines } from '../../services/workouts';
 import ScreenContainer from '../../components/ScreenContainer';
 import Card from '../../components/Card';
 import ProgressBar from '../../components/ProgressBar';
 import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
-import type { FoodLog, Goal } from '../../types/database';
+import type { FoodLog, Goal, Workout } from '../../types/database';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
   BottomTabScreenProps<MainTabParamList>
 >;
 
+const TODAY_WEEKDAY = new Date().getDay();
+
 export default function HomeScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { profile } = useProfile();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [todayRoutine, setTodayRoutine] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     if (!user) return;
     setLoading(true);
-    Promise.all([fetchDailyLogs(user.id), fetchLatestGoal(user.id)])
-      .then(([l, g]) => {
+    Promise.all([fetchDailyLogs(user.id), fetchLatestGoal(user.id), fetchRoutines(user.id)])
+      .then(([l, g, routines]) => {
         setLogs(l);
         setGoal(g);
+        setTodayRoutine(routines.find((r) => r.day_of_week === TODAY_WEEKDAY) ?? null);
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -89,16 +94,29 @@ export default function HomeScreen({ navigation }: Props) {
         <View style={styles.quickActions}>
           <Pressable
             style={styles.actionCard}
-            onPress={() => navigation.navigate('Nutrition')}
+            onPress={() => navigation.navigate('Nutrition', { screen: 'LogMeal' })}
           >
             <Ionicons name="restaurant" size={22} color={COLORS.accent} />
             <Text style={styles.actionLabel}>Log food</Text>
           </Pressable>
-          <Pressable style={styles.actionCard} onPress={() => navigation.navigate('Workouts')}>
+          <Pressable
+            style={styles.actionCard}
+            onPress={() =>
+              todayRoutine
+                ? navigation.navigate('Workouts', {
+                    screen: 'WorkoutSession',
+                    params: { workoutId: todayRoutine.id },
+                  })
+                : navigation.navigate('Workouts', { screen: 'WorkoutsHome' })
+            }
+          >
             <Ionicons name="barbell" size={22} color={COLORS.accent} />
-            <Text style={styles.actionLabel}>Start workout</Text>
+            <Text style={styles.actionLabel}>{todayRoutine ? `Start ${todayRoutine.name}` : 'Rest day'}</Text>
           </Pressable>
-          <Pressable style={styles.actionCard} onPress={() => navigation.navigate('Calendar')}>
+          <Pressable
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('Profile', { screen: 'CalendarMain' })}
+          >
             <Ionicons name="calendar" size={22} color={COLORS.accent} />
             <Text style={styles.actionLabel}>Calendar</Text>
           </Pressable>
