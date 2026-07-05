@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Calendar, Dumbbell, Flame, UtensilsCrossed } from "lucide-react-native";
+import { Calendar, Dumbbell, Flame, UtensilsCrossed } from 'lucide-react-native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -12,7 +12,7 @@ import { fetchDailyLogs } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
 import { fetchRoutines } from '../../services/workouts';
 import ScreenContainer from '../../components/ScreenContainer';
-import { Card } from '../../components/ui';
+import { Card, CountUp, ProgressRing, SkeletonCard } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
 import { Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLog, Goal, Workout } from '../../types/database';
@@ -71,19 +71,28 @@ export default function HomeScreen({ navigation }: Props) {
         <Text style={styles.subGreeting}>Let's make today count.</Text>
 
         {loading ? (
-          <ActivityIndicator color={t.colors.accent} style={styles.loader} />
+          <SkeletonCard style={styles.card} />
         ) : goal ? (
           <Card style={styles.card} highlighted>
-            <View style={styles.remainingRow}>
-              <View>
-                <Text style={styles.remainingLabel}>Calories remaining</Text>
-                <Text style={styles.remainingValue}>{remaining}</Text>
-              </View>
-              <View style={styles.energyBadge}>
-                <Flame size={26} color={t.colors.energy} />
+            <View style={styles.heroRow}>
+              <ProgressRing
+                progress={goal.calorie_target > 0 ? totals.calories / goal.calorie_target : 0}
+                size={148}
+                strokeWidth={13}
+              >
+                <CountUp value={remaining ?? 0} style={styles.remainingValue} />
+                <Text style={styles.remainingLabel}>kcal left</Text>
+              </ProgressRing>
+              <View style={styles.heroSide}>
+                <View style={styles.energyBadge}>
+                  <Flame size={22} color={t.colors.energy} />
+                </View>
+                <Text style={styles.heroEaten}>
+                  {Math.round(totals.calories)} <Text style={styles.heroEatenUnit}>eaten</Text>
+                </Text>
+                <Text style={styles.heroTarget}>of {goal.calorie_target} kcal</Text>
               </View>
             </View>
-            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={t.colors.accent} />
             <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={t.colors.protein} />
           </Card>
         ) : (
@@ -98,7 +107,7 @@ export default function HomeScreen({ navigation }: Props) {
             style={styles.actionCard}
             onPress={() => navigation.navigate('Nutrition', { screen: 'LogMeal' })}
           >
-            <UtensilsCrossed size={22} color={t.colors.accent} />
+            <UtensilsCrossed size={22} color={t.colors.accentEmphasis} />
             <Text style={styles.actionLabel}>Log food</Text>
           </Pressable>
           <Pressable
@@ -112,14 +121,14 @@ export default function HomeScreen({ navigation }: Props) {
                 : navigation.navigate('Workouts', { screen: 'WorkoutsHome' })
             }
           >
-            <Dumbbell size={22} color={t.colors.accent} />
+            <Dumbbell size={22} color={t.colors.accentEmphasis} />
             <Text style={styles.actionLabel}>{todayRoutine ? `Start ${todayRoutine.name}` : 'Rest day'}</Text>
           </Pressable>
           <Pressable
             style={styles.actionCard}
             onPress={() => navigation.navigate('Profile', { screen: 'CalendarMain' })}
           >
-            <Calendar size={22} color={t.colors.accent} />
+            <Calendar size={22} color={t.colors.accentEmphasis} />
             <Text style={styles.actionLabel}>Calendar</Text>
           </Pressable>
         </View>
@@ -135,16 +144,26 @@ function createStyles(t: Theme) {
   subGreeting: { ...t.typography.body, color: t.colors.textSecondary, marginTop: t.spacing.xs, marginBottom: t.spacing.xxl },
   loader: { marginTop: t.spacing.xxl },
   card: { marginBottom: t.spacing.xl },
-  remainingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.spacing.lg },
-  remainingLabel: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase' },
-  remainingValue: { ...t.typography.display, color: t.colors.textPrimary, marginTop: t.spacing.xs },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.xl,
+    marginBottom: t.spacing.lg,
+  },
+  heroSide: { flex: 1, gap: t.spacing.xs },
+  remainingLabel: { ...t.typography.label, color: t.colors.textSecondary },
+  remainingValue: { ...t.typography.stat, fontSize: 34, lineHeight: 38, color: t.colors.textPrimary },
+  heroEaten: { ...t.typography.statSmall, color: t.colors.textPrimary },
+  heroEatenUnit: { ...t.typography.caption, color: t.colors.textSecondary },
+  heroTarget: { ...t.typography.caption, color: t.colors.textSecondary },
   energyBadge: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: t.radii.full,
     backgroundColor: t.colors.energyMuted,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: t.spacing.xs,
   },
   emptyText: { ...t.typography.body, color: t.colors.textSecondary },
   sectionTitle: { ...t.typography.h3, color: t.colors.textPrimary, marginBottom: t.spacing.md },

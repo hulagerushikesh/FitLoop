@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,6 +13,7 @@ import {
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react-native";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
+import { confirm } from '../../utils/confirm';
 import { useAuth } from '../../hooks/useAuth';
 import {
   fetchExerciseLibrary,
@@ -169,31 +169,29 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
     }
   };
 
-  const onDelete = () => {
+  const onDelete = async () => {
     if (!workoutId) return;
-    Alert.alert('Delete routine?', name, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          setDeleting(true);
-          try {
-            await deleteRoutine(workoutId);
-            navigation.navigate('WorkoutsHome');
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to delete routine');
-            setDeleting(false);
-          }
-        },
-      },
-    ]);
+    const ok = await confirm({
+      title: 'Delete routine?',
+      message: name,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await deleteRoutine(workoutId);
+      navigation.navigate('WorkoutsHome');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete routine');
+      setDeleting(false);
+    }
   };
 
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={t.colors.accent} />
+        <ActivityIndicator size="large" color={t.colors.accentEmphasis} />
       </ScreenContainer>
     );
   }
@@ -226,7 +224,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
           <View style={styles.exercisesHeader}>
             <Text style={styles.label}>Exercises</Text>
             <Pressable style={styles.addLinkRow} onPress={() => navigation.navigate('ExerciseLibrary', { selectMode: true })}>
-              <Plus size={16} color={t.colors.accent} />
+              <Plus size={16} color={t.colors.accentEmphasis} />
               <Text style={styles.addLink}>Add exercise</Text>
             </Pressable>
           </View>
@@ -306,7 +304,7 @@ function createStyles(t: Theme) {
   dayPillTextActive: { color: t.colors.onAccent },
   exercisesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: t.spacing.xl },
   addLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  addLink: { color: t.colors.accent, fontFamily: FONTS.bold },
+  addLink: { color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
   empty: { color: t.colors.textSecondary, ...t.typography.caption, marginTop: t.spacing.md },
   exerciseCard: { marginTop: t.spacing.sm, padding: t.spacing.md },
   exerciseRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

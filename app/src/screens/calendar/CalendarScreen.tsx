@@ -122,7 +122,7 @@ export default function CalendarScreen() {
         </View>
 
         {loadingMonth ? (
-          <ActivityIndicator color={t.colors.accent} style={{ marginVertical: t.spacing.xl }} />
+          <ActivityIndicator color={t.colors.accentEmphasis} style={{ marginVertical: t.spacing.xl }} />
         ) : (
           weeks.map((week, wi) => (
             <View key={wi} style={styles.weekRow}>
@@ -160,7 +160,7 @@ export default function CalendarScreen() {
         <Card style={styles.detailCard}>
           <Text style={styles.detailTitle}>{formatDateLong(selectedDate)}</Text>
           {loadingDetail ? (
-            <ActivityIndicator color={t.colors.accent} style={{ marginTop: t.spacing.md }} />
+            <ActivityIndicator color={t.colors.accentEmphasis} style={{ marginTop: t.spacing.md }} />
           ) : (
             <>
               <View style={styles.statsRow}>
@@ -209,7 +209,7 @@ function createStyles(t: Theme) {
   dayCellFilled: { borderRadius: t.radii.md },
   dayCellSelected: { backgroundColor: t.colors.accent },
   dayNumText: { fontSize: 14, color: t.colors.textPrimary },
-  dayNumTextToday: { color: t.colors.accent, fontFamily: FONTS.extrabold },
+  dayNumTextToday: { color: t.colors.accentEmphasis, fontFamily: FONTS.extrabold },
   dayNumTextSelected: { color: t.colors.onAccent, fontFamily: FONTS.extrabold },
   dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: t.colors.accent, marginTop: 2 },
   dotSelected: { backgroundColor: t.colors.onAccent },

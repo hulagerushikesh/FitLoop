@@ -78,7 +78,7 @@ export default function NutritionHistoryScreen() {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={t.colors.accent} />
+        <ActivityIndicator size="large" color={t.colors.accentEmphasis} />
       </ScreenContainer>
     );
   }

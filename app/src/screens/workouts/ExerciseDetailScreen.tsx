@@ -35,7 +35,7 @@ export default function ExerciseDetailScreen({ route }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={t.colors.accent} />
+        <ActivityIndicator size="large" color={t.colors.accentEmphasis} />
       </ScreenContainer>
     );
   }
@@ -55,12 +55,12 @@ export default function ExerciseDetailScreen({ route }: Props) {
 
         <View style={styles.badgeRow}>
           <View style={styles.badge}>
-            <PersonStanding size={14} color={t.colors.accent} />
+            <PersonStanding size={14} color={t.colors.accentEmphasis} />
             <Text style={styles.badgeText}>{exercise.muscle_group.replace('_', ' ')}</Text>
           </View>
           {exercise.equipment ? (
             <View style={styles.badge}>
-              <Dumbbell size={14} color={t.colors.accent} />
+              <Dumbbell size={14} color={t.colors.accentEmphasis} />
               <Text style={styles.badgeText}>{exercise.equipment}</Text>
             </View>
           ) : null}

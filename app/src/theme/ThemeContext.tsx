@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Theme, darkTheme, lightTheme } from './index';
+import { Theme, darkTheme, lightTheme } from './themes';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,8 +29,7 @@ import { fetchLatestWeight } from '../../services/profile';
 import { estimateSessionCalories } from '../../engine/calorieBurn';
 import { suggestNextSet, bestSet } from '../../engine/progressiveOverload';
 import RestTimer from '../../components/RestTimer';
-import { Card } from '../../components/ui';
-import { Button } from '../../components/ui';
+import { Button, Card, useToast } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { DEFAULT_REST_SECONDS } from '../../constants/workoutTemplates';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
@@ -96,7 +94,7 @@ function ExerciseLogCard({
 
       {suggestions.length > 0 ? (
         <View style={styles.suggestionRow}>
-          <TrendingUp size={14} color={t.colors.accent} />
+          <TrendingUp size={14} color={t.colors.accentEmphasis} />
           <Text style={styles.suggestion}>{suggestions.map((s) => s.label).join(' or ')}</Text>
         </View>
       ) : null}
@@ -154,6 +152,7 @@ function ExerciseLogCard({
 }
 
 export default function WorkoutSessionScreen({ route, navigation }: Props) {
+  const { showToast } = useToast();
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
   const { workoutId } = route.params;
@@ -246,9 +245,7 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
       const caloriesBurned = estimateSessionCalories(exercisesWithSets, bodyWeightKg ?? 70, durationMinutes);
       await finishSession(session.id, caloriesBurned);
 
-      // Alert.alert doesn't block and isn't implemented on react-native-web, so
-      // navigation can't be gated on its callback — fire it and navigate together.
-      Alert.alert('Workout complete', `Estimated ${caloriesBurned} kcal burned across ${totalSetsLogged} sets.`);
+      showToast(`Workout complete — ~${caloriesBurned} kcal across ${totalSetsLogged} sets`);
       navigation.navigate('WorkoutsHome');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to finish workout');
@@ -260,7 +257,7 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={t.colors.accent} />
+        <ActivityIndicator size="large" color={t.colors.accentEmphasis} />
       </ScreenContainer>
     );
   }
@@ -309,7 +306,7 @@ function createStyles(t: Theme) {
   target: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
   lastTime: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.sm },
   suggestionRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: t.spacing.xs },
-  suggestion: { ...t.typography.caption, color: t.colors.accent, fontFamily: FONTS.bold },
+  suggestion: { ...t.typography.caption, color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
   loggedSet: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.xs },
   inputRow: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.md, alignItems: 'flex-end' },
   setField: { flex: 1, minWidth: 0 },

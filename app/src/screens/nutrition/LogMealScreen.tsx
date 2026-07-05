@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -17,6 +16,7 @@ import { Bookmark, Camera, Check, MessageCircleMore, SquarePen, Trash2 } from 'l
 import type { LucideIcon } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { NutritionStackParamList } from '../../navigation/types';
+import { confirm } from '../../utils/confirm';
 import { useAuth } from '../../hooks/useAuth';
 import { addFoodLog, deleteMeal, fetchMeals, logSavedMeal, saveMeal } from '../../services/nutrition';
 import { analyzeMealText, analyzeMealPhoto } from '../../services/aiMeal';
@@ -187,18 +187,16 @@ export default function LogMealScreen({ navigation, route }: Props) {
     }
   };
 
-  const onDeleteMealPreset = (meal: Meal) => {
-    Alert.alert('Delete saved meal?', meal.name, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteMeal(meal.id);
-          setMeals((prev) => prev.filter((m) => m.id !== meal.id));
-        },
-      },
-    ]);
+  const onDeleteMealPreset = async (meal: Meal) => {
+    const ok = await confirm({
+      title: 'Delete saved meal?',
+      message: meal.name,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    await deleteMeal(meal.id);
+    setMeals((prev) => prev.filter((m) => m.id !== meal.id));
   };
 
   return (
@@ -250,13 +248,13 @@ export default function LogMealScreen({ navigation, route }: Props) {
                 <Button label="Take photo" onPress={() => onPickPhoto(true)} variant="secondary" style={styles.photoButton} />
                 <Button label="Choose from library" onPress={() => onPickPhoto(false)} variant="secondary" style={styles.photoButton} />
               </View>
-              {analyzing ? <ActivityIndicator color={t.colors.accent} style={{ marginTop: t.spacing.md }} /> : null}
+              {analyzing ? <ActivityIndicator color={t.colors.accentEmphasis} style={{ marginTop: t.spacing.md }} /> : null}
             </>
           ) : null}
 
           {mode === 'saved' ? (
             loadingMeals ? (
-              <ActivityIndicator color={t.colors.accent} style={{ marginTop: t.spacing.xl }} />
+              <ActivityIndicator color={t.colors.accentEmphasis} style={{ marginTop: t.spacing.xl }} />
             ) : meals.length === 0 ? (
               <Text style={styles.empty}>No saved meals yet — log something and save it for reuse.</Text>
             ) : (

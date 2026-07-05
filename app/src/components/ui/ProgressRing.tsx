@@ -49,7 +49,7 @@ export default function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={trackColor ?? theme.colors.surfaceElevated}
+          stroke={trackColor ?? theme.colors.skeleton}
           strokeWidth={strokeWidth}
           fill="none"
         />
@@ -57,7 +57,7 @@ export default function ProgressRing({
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={color ?? theme.colors.accent}
+          stroke={color ?? theme.colors.accentEmphasis}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           fill="none"

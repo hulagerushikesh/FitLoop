@@ -85,7 +85,7 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={t.colors.accent} />
+        <ActivityIndicator size="large" color={t.colors.accentEmphasis} />
       </ScreenContainer>
     );
   }
@@ -150,7 +150,7 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
               </>
             ) : (
               <Pressable style={styles.addButton} onPress={() => setShowAddForm(true)}>
-                <CirclePlus size={18} color={t.colors.accent} />
+                <CirclePlus size={18} color={t.colors.accentEmphasis} />
                 <Text style={styles.addButtonText}>Add custom exercise</Text>
               </Pressable>
             )}
@@ -193,7 +193,7 @@ function createStyles(t: Theme) {
   rowSub: { ...t.typography.caption, color: t.colors.textSecondary },
   addSection: { marginTop: t.spacing.xl },
   addButton: { flexDirection: 'row', gap: t.spacing.xs, alignItems: 'center', justifyContent: 'center', paddingVertical: t.spacing.md },
-  addButtonText: { color: t.colors.accent, fontFamily: FONTS.semibold, fontSize: 15 },
+  addButtonText: { color: t.colors.accentEmphasis, fontFamily: FONTS.semibold, fontSize: 15 },
   saveButton: { marginTop: t.spacing.sm },
   error: { color: t.colors.danger, marginHorizontal: t.spacing.lg, marginBottom: t.spacing.sm, ...t.typography.caption },
 });

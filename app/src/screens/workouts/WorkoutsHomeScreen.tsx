@@ -8,8 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { fetchRoutines, seedStandardPlan } from '../../services/workouts';
 import { DAY_LABELS, DAY_LABELS_SHORT } from '../../constants/workoutTemplates';
 import ScreenContainer from '../../components/ScreenContainer';
-import { Card } from '../../components/ui';
-import { Button } from '../../components/ui';
+import { Button, Card, SkeletonCard } from '../../components/ui';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { Workout } from '../../types/database';
 
@@ -67,8 +66,12 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={t.colors.accent} />
+      <ScreenContainer>
+        <View style={styles.container}>
+          <SkeletonCard />
+          <SkeletonCard style={{ marginTop: t.spacing.lg }} />
+          <SkeletonCard style={{ marginTop: t.spacing.lg }} />
+        </View>
       </ScreenContainer>
     );
   }
@@ -186,7 +189,7 @@ function createStyles(t: Theme) {
   },
   weekRowToday: { backgroundColor: t.colors.accentMuted },
   weekDay: { ...t.typography.bodyBold, color: t.colors.textSecondary, width: 44 },
-  weekDayToday: { color: t.colors.accent },
+  weekDayToday: { color: t.colors.accentEmphasis },
   weekRoutine: { ...t.typography.body, color: t.colors.textPrimary, flex: 1 },
   weekRoutineEmpty: { color: t.colors.textTertiary },
   standardPlanButton: { marginBottom: t.spacing.lg },

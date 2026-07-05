@@ -9,8 +9,7 @@ import { fetchLatestGoal } from '../../services/goals';
 import OptionPicker from '../../components/OptionPicker';
 import Stepper from '../../components/Stepper';
 import TextField from '../../components/TextField';
-import { Button } from '../../components/ui';
-import { Card } from '../../components/ui';
+import { Button, Card, Chip } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import {
   SEX_OPTIONS,
@@ -19,7 +18,7 @@ import {
   RATE_BOUNDS,
   formatRate,
 } from '../../constants/profileOptions';
-import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
+import { FONTS, Theme, useTheme, useThemeMode, useThemedStyles } from '../../theme';
 import type { ActivityLevel, GoalType, Goal, Sex } from '../../types/database';
 import type { ProfileStackParamList } from '../../navigation/types';
 
@@ -29,6 +28,7 @@ export default function ProfileScreen({ navigation }: Props) {
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
   const { user, signOut } = useAuth();
+  const { mode: themeMode, setMode: setThemeMode } = useThemeMode();
   const { profile, refresh } = useProfile();
 
   const [age, setAge] = useState('');
@@ -114,7 +114,7 @@ export default function ProfileScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('CalendarMain')}
             >
               <View style={styles.menuIconWrap}>
-                <Calendar size={18} color={t.colors.accent} />
+                <Calendar size={18} color={t.colors.accentEmphasis} />
               </View>
               <Text style={styles.menuLabel}>Calendar</Text>
               <ChevronRight size={18} color={t.colors.textTertiary} />
@@ -125,12 +125,25 @@ export default function ProfileScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('AnalyticsMain')}
             >
               <View style={styles.menuIconWrap}>
-                <BarChart3 size={18} color={t.colors.accent} />
+                <BarChart3 size={18} color={t.colors.accentEmphasis} />
               </View>
               <Text style={styles.menuLabel}>Analytics</Text>
               <ChevronRight size={18} color={t.colors.textTertiary} />
             </Pressable>
           </Card>
+
+          <Text style={styles.section}>Appearance</Text>
+          <View style={styles.themeRow}>
+            {(['system', 'light', 'dark'] as const).map((m) => (
+              <Chip
+                key={m}
+                label={m === 'system' ? 'Auto' : m === 'light' ? 'Light' : 'Dark'}
+                selected={themeMode === m}
+                onPress={() => setThemeMode(m)}
+                style={styles.themeChip}
+              />
+            ))}
+          </View>
 
           <Text style={styles.section}>Basics</Text>
           <Text style={styles.label}>Sex</Text>
@@ -139,7 +152,7 @@ export default function ProfileScreen({ navigation }: Props) {
           <TextField label="Height (cm)" keyboardType="decimal-pad" value={heightCm} onChangeText={setHeightCm} />
           <Text style={styles.label}>Current weight (kg)</Text>
           {loadingWeight ? (
-            <ActivityIndicator color={t.colors.accent} />
+            <ActivityIndicator color={t.colors.accentEmphasis} />
           ) : (
             <TextField keyboardType="decimal-pad" value={weightKg} onChangeText={setWeightKg} />
           )}
@@ -178,7 +191,7 @@ function createStyles(t: Theme) {
   email: { ...t.typography.caption, color: t.colors.textSecondary, marginBottom: t.spacing.lg },
   targetCard: { marginBottom: t.spacing.lg },
   targetLabel: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase' },
-  targetCalories: { fontSize: 28, fontFamily: FONTS.extrabold, color: t.colors.accent, marginTop: t.spacing.xs },
+  targetCalories: { fontSize: 28, fontFamily: FONTS.extrabold, color: t.colors.accentEmphasis, marginTop: t.spacing.xs },
   targetMacros: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.xs },
   targetReason: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.sm, fontStyle: 'italic' },
   menuCard: { padding: 0, marginBottom: t.spacing.lg, overflow: 'hidden' },
@@ -193,6 +206,8 @@ function createStyles(t: Theme) {
   },
   menuLabel: { ...t.typography.bodyBold, color: t.colors.textPrimary, flex: 1 },
   menuDivider: { height: 1, backgroundColor: t.colors.border, marginLeft: t.spacing.lg + 34 + t.spacing.md },
+  themeRow: { flexDirection: 'row', gap: t.spacing.sm },
+  themeChip: { flex: 1, justifyContent: 'center' },
   section: { ...t.typography.h3, color: t.colors.textPrimary, marginTop: t.spacing.xl, marginBottom: t.spacing.md },
   label: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, marginTop: t.spacing.md, textTransform: 'uppercase' },
   saveButton: { marginTop: t.spacing.xl },

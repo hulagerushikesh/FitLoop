@@ -8,8 +8,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { fetchDailyLogs, deleteFoodLog } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
 import ScreenContainer from '../../components/ScreenContainer';
-import { Card } from '../../components/ui';
-import { Button } from '../../components/ui';
+import { Button, Card, SkeletonCard } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
 import { MEAL_TYPE_OPTIONS } from '../../constants/nutritionOptions';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
@@ -92,8 +91,12 @@ export default function NutritionHomeScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={t.colors.accent} />
+      <ScreenContainer>
+        <View style={styles.container}>
+          <SkeletonCard />
+          <SkeletonCard style={{ marginTop: t.spacing.lg }} />
+          <SkeletonCard style={{ marginTop: t.spacing.lg }} />
+        </View>
       </ScreenContainer>
     );
   }
@@ -105,7 +108,7 @@ export default function NutritionHomeScreen({ navigation }: Props) {
 
         {goal ? (
           <Card style={styles.progressCard}>
-            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={t.colors.accent} />
+            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={t.colors.accentEmphasis} />
             <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={t.colors.protein} />
             <ProgressBar label="Carbs" current={totals.carbs_g} target={goal.carbs_g} unit="g" color={t.colors.carbs} />
             <ProgressBar label="Fat" current={totals.fat_g} target={goal.fat_g} unit="g" color={t.colors.fat} />

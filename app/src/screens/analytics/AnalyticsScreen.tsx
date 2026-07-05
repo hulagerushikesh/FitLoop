@@ -10,7 +10,7 @@ export default function AnalyticsScreen() {
   return (
     <ScreenContainer style={styles.container}>
       <View style={styles.iconBadge}>
-        <BarChart3 size={28} color={t.colors.accent} />
+        <BarChart3 size={28} color={t.colors.accentEmphasis} />
       </View>
       <Text style={styles.title}>Analytics</Text>
       <Text style={styles.subtitle}>
