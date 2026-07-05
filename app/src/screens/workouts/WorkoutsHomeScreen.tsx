@@ -2,15 +2,15 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronRight, Plus } from "lucide-react-native";
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchRoutines, seedStandardPlan } from '../../services/workouts';
 import { DAY_LABELS, DAY_LABELS_SHORT } from '../../constants/workoutTemplates';
 import ScreenContainer from '../../components/ScreenContainer';
-import Card from '../../components/Card';
-import Button from '../../components/Button';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Card } from '../../components/ui';
+import { Button } from '../../components/ui';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { Workout } from '../../types/database';
 
 type Props = NativeStackScreenProps<WorkoutsStackParamList, 'WorkoutsHome'>;
@@ -18,6 +18,8 @@ type Props = NativeStackScreenProps<WorkoutsStackParamList, 'WorkoutsHome'>;
 const TODAY_WEEKDAY = new Date().getDay();
 
 export default function WorkoutsHomeScreen({ navigation }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const [routines, setRoutines] = useState<Workout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,7 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={t.colors.accent} />
       </ScreenContainer>
     );
   }
@@ -111,7 +113,7 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
                 <Text style={[styles.weekRoutine, !routine && styles.weekRoutineEmpty]}>
                   {routine ? routine.name : 'Rest day'}
                 </Text>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textTertiary} />
+                <ChevronRight size={16} color={t.colors.textTertiary} />
               </Pressable>
             );
           })}
@@ -155,7 +157,7 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
 
       <View style={styles.newButtonWrap}>
         <Pressable style={styles.newButton} onPress={() => navigation.navigate('RoutineBuilder', undefined)}>
-          <Ionicons name="add" size={20} color={COLORS.textPrimary} />
+          <Plus size={20} color={t.colors.textPrimary} />
           <Text style={styles.newButtonText}>New routine</Text>
         </Pressable>
       </View>
@@ -163,53 +165,55 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  container: { padding: SPACING.lg, paddingBottom: 110 },
-  todayCard: { marginBottom: SPACING.xl },
-  todayLabel: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase' },
-  todayName: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary, marginTop: SPACING.xs },
-  restText: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: SPACING.xs },
-  todayButton: { marginTop: SPACING.lg },
-  sectionTitle: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase', marginBottom: SPACING.sm },
-  weekCard: { padding: 0, marginBottom: SPACING.lg, overflow: 'hidden' },
+  container: { padding: t.spacing.lg, paddingBottom: 110 },
+  todayCard: { marginBottom: t.spacing.xl },
+  todayLabel: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase' },
+  todayName: { ...t.typography.h1, color: t.colors.textPrimary, marginTop: t.spacing.xs },
+  restText: { ...t.typography.body, color: t.colors.textSecondary, marginTop: t.spacing.xs },
+  todayButton: { marginTop: t.spacing.lg },
+  sectionTitle: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase', marginBottom: t.spacing.sm },
+  weekCard: { padding: 0, marginBottom: t.spacing.lg, overflow: 'hidden' },
   weekRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.lg,
+    paddingVertical: t.spacing.md,
+    paddingHorizontal: t.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: t.colors.border,
   },
-  weekRowToday: { backgroundColor: COLORS.accentMuted },
-  weekDay: { ...TYPOGRAPHY.bodyBold, color: COLORS.textSecondary, width: 44 },
-  weekDayToday: { color: COLORS.accent },
-  weekRoutine: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, flex: 1 },
-  weekRoutineEmpty: { color: COLORS.textTertiary },
-  standardPlanButton: { marginBottom: SPACING.lg },
-  card: { marginBottom: SPACING.md },
+  weekRowToday: { backgroundColor: t.colors.accentMuted },
+  weekDay: { ...t.typography.bodyBold, color: t.colors.textSecondary, width: 44 },
+  weekDayToday: { color: t.colors.accent },
+  weekRoutine: { ...t.typography.body, color: t.colors.textPrimary, flex: 1 },
+  weekRoutineEmpty: { color: t.colors.textTertiary },
+  standardPlanButton: { marginBottom: t.spacing.lg },
+  card: { marginBottom: t.spacing.md },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary },
+  cardTitle: { ...t.typography.h3, color: t.colors.textPrimary },
   dayBadge: {
-    backgroundColor: COLORS.surfaceHigh,
-    paddingHorizontal: SPACING.sm,
+    backgroundColor: t.colors.surfaceElevated,
+    paddingHorizontal: t.spacing.sm,
     paddingVertical: 3,
-    borderRadius: RADIUS.full,
+    borderRadius: t.radii.full,
   },
-  dayBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.textSecondary },
-  startButton: { marginTop: SPACING.md },
-  newButtonWrap: { position: 'absolute', bottom: SPACING.xl, left: SPACING.lg, right: SPACING.lg },
+  dayBadgeText: { fontSize: 10, fontFamily: FONTS.extrabold, color: t.colors.textSecondary },
+  startButton: { marginTop: t.spacing.md },
+  newButtonWrap: { position: 'absolute', bottom: t.spacing.xl, left: t.spacing.lg, right: t.spacing.lg },
   newButton: {
     flexDirection: 'row',
-    gap: SPACING.xs,
-    backgroundColor: COLORS.surfaceHigh,
+    gap: t.spacing.xs,
+    backgroundColor: t.colors.surfaceElevated,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.full,
-    paddingVertical: SPACING.md + 2,
+    borderColor: t.colors.border,
+    borderRadius: t.radii.full,
+    paddingVertical: t.spacing.md + 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  newButtonText: { color: COLORS.textPrimary, fontWeight: '700', fontSize: 15 },
-  error: { color: COLORS.danger, marginBottom: SPACING.md, ...TYPOGRAPHY.caption },
+  newButtonText: { color: t.colors.textPrimary, fontFamily: FONTS.bold, fontSize: 15 },
+  error: { color: t.colors.danger, marginBottom: t.spacing.md, ...t.typography.caption },
 });
+}

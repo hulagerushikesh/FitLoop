@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
-import { COLORS } from '../theme/theme';
+import { Theme, useThemedStyles } from '../theme';
 
 interface Props {
   children: React.ReactNode;
@@ -8,12 +8,15 @@ interface Props {
 }
 
 export default function ScreenContainer({ children, style }: Props) {
+  const styles = useThemedStyles(createStyles);
   return <View style={[styles.container, style]}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-});
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: t.colors.background,
+    },
+  });
+}

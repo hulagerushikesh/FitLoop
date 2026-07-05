@@ -1,13 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { Check, Dumbbell, Flame } from "lucide-react-native";
 import { useAuth } from '../../hooks/useAuth';
 import { fetchRecentSummary } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
 import ScreenContainer from '../../components/ScreenContainer';
-import Card from '../../components/Card';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Card } from '../../components/ui';
+import { Theme, useTheme, useThemedStyles } from '../../theme';
 import type { DailySummary, Goal } from '../../types/database';
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -32,6 +32,8 @@ function formatDay(day: string): string {
 }
 
 export default function NutritionHistoryScreen() {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const [days, setDays] = useState<DailySummary[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
@@ -76,7 +78,7 @@ export default function NutritionHistoryScreen() {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={t.colors.accent} />
       </ScreenContainer>
     );
   }
@@ -86,7 +88,7 @@ export default function NutritionHistoryScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Card style={styles.streakCard} highlighted={streak > 0}>
           <View style={styles.streakIconWrap}>
-            <Ionicons name="flame" size={22} color={COLORS.energy} />
+            <Flame size={22} color={t.colors.energy} />
           </View>
           <View>
             <Text style={styles.streakValue}>{streak} day{streak === 1 ? '' : 's'}</Text>
@@ -105,7 +107,7 @@ export default function NutritionHistoryScreen() {
                 <Text style={styles.dayLabel}>{formatDay(entry.day)}</Text>
                 {hit ? (
                   <View style={styles.hitBadge}>
-                    <Ionicons name="checkmark" size={12} color={COLORS.accentText} />
+                    <Check size={12} color={t.colors.onAccent} />
                   </View>
                 ) : null}
               </View>
@@ -127,7 +129,7 @@ export default function NutritionHistoryScreen() {
               )}
               {entry.workout_count > 0 ? (
                 <View style={styles.workoutLine}>
-                  <Ionicons name="barbell" size={12} color={COLORS.textSecondary} />
+                  <Dumbbell size={12} color={t.colors.textSecondary} />
                   <Text style={styles.workoutLineText}>
                     {entry.workout_count} workout{entry.workout_count === 1 ? '' : 's'} · {entry.calories_burned} kcal burned
                   </Text>
@@ -141,39 +143,41 @@ export default function NutritionHistoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  container: { padding: SPACING.lg, paddingBottom: 60 },
-  streakCard: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.xl },
+  container: { padding: t.spacing.lg, paddingBottom: 60 },
+  streakCard: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, marginBottom: t.spacing.xl },
   streakIconWrap: {
     width: 44,
     height: 44,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.energyMuted,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.energyMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  streakValue: { ...TYPOGRAPHY.h2, color: COLORS.textPrimary },
-  streakLabel: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
-  sectionTitle: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase', marginBottom: SPACING.sm },
-  dayCard: { marginBottom: SPACING.md },
-  dayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },
-  dayLabel: { ...TYPOGRAPHY.bodyBold, color: COLORS.textPrimary },
+  streakValue: { ...t.typography.h2, color: t.colors.textPrimary },
+  streakLabel: { ...t.typography.caption, color: t.colors.textSecondary },
+  sectionTitle: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase', marginBottom: t.spacing.sm },
+  dayCard: { marginBottom: t.spacing.md },
+  dayHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: t.spacing.sm },
+  dayLabel: { ...t.typography.bodyBold, color: t.colors.textPrimary },
   hitBadge: {
     width: 20,
     height: 20,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.accent,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
   dayRow: { flexDirection: 'row', alignItems: 'baseline' },
-  dayCalories: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary },
-  dayTarget: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
-  barTrack: { height: 6, borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceHigh, marginTop: SPACING.sm, overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: RADIUS.full, backgroundColor: COLORS.accent },
-  dayMacros: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: SPACING.sm },
-  emptyText: { ...TYPOGRAPHY.caption, color: COLORS.textTertiary },
-  workoutLine: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.sm },
-  workoutLineText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
+  dayCalories: { ...t.typography.h3, color: t.colors.textPrimary },
+  dayTarget: { ...t.typography.caption, color: t.colors.textSecondary },
+  barTrack: { height: 6, borderRadius: t.radii.full, backgroundColor: t.colors.surfaceElevated, marginTop: t.spacing.sm, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: t.radii.full, backgroundColor: t.colors.accent },
+  dayMacros: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.sm },
+  emptyText: { ...t.typography.caption, color: t.colors.textTertiary },
+  workoutLine: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, marginTop: t.spacing.sm },
+  workoutLineText: { ...t.typography.caption, color: t.colors.textSecondary },
 });
+}

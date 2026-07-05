@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Dumbbell, PersonStanding } from "lucide-react-native";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { fetchExerciseById } from '../../services/workouts';
 import ScreenContainer from '../../components/ScreenContainer';
-import Card from '../../components/Card';
-import Button from '../../components/Button';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Card } from '../../components/ui';
+import { Button } from '../../components/ui';
+import { Theme, useTheme, useThemedStyles } from '../../theme';
 import type { Exercise } from '../../types/database';
 
 type Props = NativeStackScreenProps<WorkoutsStackParamList, 'ExerciseDetail'>;
@@ -18,6 +18,8 @@ function youtubeSearchUrl(exerciseName: string): string {
 }
 
 export default function ExerciseDetailScreen({ route }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { exerciseId } = route.params;
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +35,7 @@ export default function ExerciseDetailScreen({ route }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={t.colors.accent} />
       </ScreenContainer>
     );
   }
@@ -53,12 +55,12 @@ export default function ExerciseDetailScreen({ route }: Props) {
 
         <View style={styles.badgeRow}>
           <View style={styles.badge}>
-            <Ionicons name="body-outline" size={14} color={COLORS.accent} />
+            <PersonStanding size={14} color={t.colors.accent} />
             <Text style={styles.badgeText}>{exercise.muscle_group.replace('_', ' ')}</Text>
           </View>
           {exercise.equipment ? (
             <View style={styles.badge}>
-              <Ionicons name="barbell-outline" size={14} color={COLORS.accent} />
+              <Dumbbell size={14} color={t.colors.accent} />
               <Text style={styles.badgeText}>{exercise.equipment}</Text>
             </View>
           ) : null}
@@ -82,24 +84,26 @@ export default function ExerciseDetailScreen({ route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  container: { padding: SPACING.xxl },
-  name: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary, marginBottom: SPACING.md },
-  badgeRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.xl },
+  container: { padding: t.spacing.xxl },
+  name: { ...t.typography.h1, color: t.colors.textPrimary, marginBottom: t.spacing.md },
+  badgeRow: { flexDirection: 'row', gap: t.spacing.sm, marginBottom: t.spacing.xl },
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: COLORS.surfaceHigh,
-    borderRadius: RADIUS.full,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    backgroundColor: t.colors.surfaceElevated,
+    borderRadius: t.radii.full,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.xs,
   },
-  badgeText: { ...TYPOGRAPHY.caption, color: COLORS.textPrimary, textTransform: 'capitalize' },
-  videoButton: { marginBottom: SPACING.xl },
+  badgeText: { ...t.typography.caption, color: t.colors.textPrimary, textTransform: 'capitalize' },
+  videoButton: { marginBottom: t.spacing.xl },
   instructionsCard: {},
-  instructionsLabel: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase', marginBottom: SPACING.sm },
-  instructionsText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, lineHeight: 22 },
-  error: { color: COLORS.danger, ...TYPOGRAPHY.body },
+  instructionsLabel: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase', marginBottom: t.spacing.sm },
+  instructionsText: { ...t.typography.body, color: t.colors.textPrimary, lineHeight: 22 },
+  error: { color: t.colors.danger, ...t.typography.body },
 });
+}

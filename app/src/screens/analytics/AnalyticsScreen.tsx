@@ -1,14 +1,16 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { BarChart3 } from "lucide-react-native";
 import ScreenContainer from '../../components/ScreenContainer';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Theme, useTheme, useThemedStyles } from '../../theme';
 
 export default function AnalyticsScreen() {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <ScreenContainer style={styles.container}>
       <View style={styles.iconBadge}>
-        <Ionicons name="stats-chart" size={28} color={COLORS.accent} />
+        <BarChart3 size={28} color={t.colors.accent} />
       </View>
       <Text style={styles.title}>Analytics</Text>
       <Text style={styles.subtitle}>
@@ -18,17 +20,19 @@ export default function AnalyticsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { alignItems: 'center', justifyContent: 'center', padding: SPACING.xxl },
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+  container: { alignItems: 'center', justifyContent: 'center', padding: t.spacing.xxl },
   iconBadge: {
     width: 64,
     height: 64,
-    borderRadius: RADIUS.xl,
-    backgroundColor: COLORS.surfaceHigh,
+    borderRadius: t.radii.xl,
+    backgroundColor: t.colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: t.spacing.lg,
   },
-  title: { ...TYPOGRAPHY.h2, color: COLORS.textPrimary, marginBottom: SPACING.sm },
-  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, textAlign: 'center' },
+  title: { ...t.typography.h2, color: t.colors.textPrimary, marginBottom: t.spacing.sm },
+  subtitle: { ...t.typography.body, color: t.colors.textSecondary, textAlign: 'center' },
 });
+}

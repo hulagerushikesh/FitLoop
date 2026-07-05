@@ -6,13 +6,15 @@ import ExerciseLibraryScreen from '../screens/workouts/ExerciseLibraryScreen';
 import ExerciseDetailScreen from '../screens/workouts/ExerciseDetailScreen';
 import RoutineBuilderScreen from '../screens/workouts/RoutineBuilderScreen';
 import WorkoutSessionScreen from '../screens/workouts/WorkoutSessionScreen';
-import { stackScreenOptions } from '../theme/navigationTheme';
+import { useTheme } from '../theme';
+import { buildStackScreenOptions } from '../theme/navigationTheme';
 
 const Stack = createNativeStackNavigator<WorkoutsStackParamList>();
 
 export default function WorkoutsStackNavigator() {
+  const theme = useTheme();
   return (
-    <Stack.Navigator screenOptions={stackScreenOptions}>
+    <Stack.Navigator screenOptions={buildStackScreenOptions(theme)}>
       <Stack.Screen name="WorkoutsHome" component={WorkoutsHomeScreen} options={{ title: 'Workouts' }} />
       <Stack.Screen
         name="ExerciseLibrary"

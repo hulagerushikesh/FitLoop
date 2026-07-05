@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { TrendingUp } from "lucide-react-native";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
@@ -30,11 +30,11 @@ import { fetchLatestWeight } from '../../services/profile';
 import { estimateSessionCalories } from '../../engine/calorieBurn';
 import { suggestNextSet, bestSet } from '../../engine/progressiveOverload';
 import RestTimer from '../../components/RestTimer';
-import Card from '../../components/Card';
-import Button from '../../components/Button';
+import { Card } from '../../components/ui';
+import { Button } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { DEFAULT_REST_SECONDS } from '../../constants/workoutTemplates';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { WorkoutLog, WorkoutSession } from '../../types/database';
 
 type Props = NativeStackScreenProps<WorkoutsStackParamList, 'WorkoutSession'>;
@@ -56,6 +56,8 @@ function ExerciseLogCard({
   loggedSets: LoggedSet[];
   onLogSet: (input: LoggedSet) => void;
 }) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const [rpe, setRpe] = useState('');
@@ -94,7 +96,7 @@ function ExerciseLogCard({
 
       {suggestions.length > 0 ? (
         <View style={styles.suggestionRow}>
-          <Ionicons name="trending-up" size={14} color={COLORS.accent} />
+          <TrendingUp size={14} color={t.colors.accent} />
           <Text style={styles.suggestion}>{suggestions.map((s) => s.label).join(' or ')}</Text>
         </View>
       ) : null}
@@ -111,7 +113,7 @@ function ExerciseLogCard({
           <TextInput
             style={styles.setInput}
             placeholder="0"
-            placeholderTextColor={COLORS.textTertiary}
+            placeholderTextColor={t.colors.textTertiary}
             keyboardType="decimal-pad"
             value={weight}
             onChangeText={setWeight}
@@ -122,7 +124,7 @@ function ExerciseLogCard({
           <TextInput
             style={styles.setInput}
             placeholder="0"
-            placeholderTextColor={COLORS.textTertiary}
+            placeholderTextColor={t.colors.textTertiary}
             keyboardType="number-pad"
             value={reps}
             onChangeText={setReps}
@@ -133,7 +135,7 @@ function ExerciseLogCard({
           <TextInput
             style={styles.setInput}
             placeholder="0"
-            placeholderTextColor={COLORS.textTertiary}
+            placeholderTextColor={t.colors.textTertiary}
             keyboardType="decimal-pad"
             value={rpe}
             onChangeText={setRpe}
@@ -152,6 +154,8 @@ function ExerciseLogCard({
 }
 
 export default function WorkoutSessionScreen({ route, navigation }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { workoutId } = route.params;
   const { user } = useAuth();
 
@@ -256,7 +260,7 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={t.colors.accent} />
       </ScreenContainer>
     );
   }
@@ -294,40 +298,42 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
-  container: { padding: SPACING.xxl, paddingBottom: 60 },
-  title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary },
-  card: { marginTop: SPACING.md },
-  exerciseName: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary },
-  target: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 },
-  lastTime: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: SPACING.sm },
-  suggestionRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: SPACING.xs },
-  suggestion: { ...TYPOGRAPHY.caption, color: COLORS.accent, fontWeight: '700' },
-  loggedSet: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, marginTop: SPACING.xs },
-  inputRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md, alignItems: 'flex-end' },
+  container: { padding: t.spacing.xxl, paddingBottom: 60 },
+  title: { ...t.typography.h1, color: t.colors.textPrimary },
+  card: { marginTop: t.spacing.md },
+  exerciseName: { ...t.typography.h3, color: t.colors.textPrimary },
+  target: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
+  lastTime: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.sm },
+  suggestionRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: t.spacing.xs },
+  suggestion: { ...t.typography.caption, color: t.colors.accent, fontFamily: FONTS.bold },
+  loggedSet: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.xs },
+  inputRow: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.md, alignItems: 'flex-end' },
   setField: { flex: 1, minWidth: 0 },
   setFieldLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textTertiary,
+    fontFamily: FONTS.bold,
+    color: t.colors.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     marginBottom: 4,
   },
   setInput: {
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceHigh,
-    borderRadius: RADIUS.md,
-    padding: SPACING.sm,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surfaceElevated,
+    borderRadius: t.radii.md,
+    padding: t.spacing.sm,
     fontSize: 14,
-    color: COLORS.textPrimary,
+    color: t.colors.textPrimary,
   },
-  logButton: { backgroundColor: COLORS.accent, borderRadius: RADIUS.md, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md },
+  logButton: { backgroundColor: t.colors.accent, borderRadius: t.radii.md, paddingVertical: t.spacing.sm, paddingHorizontal: t.spacing.md },
   logButtonDisabled: { opacity: 0.4 },
-  logButtonText: { color: COLORS.accentText, fontWeight: '700' },
-  finishButton: { marginTop: SPACING.xl },
-  error: { color: COLORS.danger, marginTop: SPACING.md, textAlign: 'center', ...TYPOGRAPHY.caption },
+  logButtonText: { color: t.colors.onAccent, fontFamily: FONTS.bold },
+  finishButton: { marginTop: t.spacing.xl },
+  error: { color: t.colors.danger, marginTop: t.spacing.md, textAlign: 'center', ...t.typography.caption },
 });
+}

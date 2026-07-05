@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Flame, Lock, Mail } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import ScreenContainer from '../../components/ScreenContainer';
 import TextField from '../../components/TextField';
-import Button from '../../components/Button';
-import { COLORS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Button } from '../../components/ui';
+import { Theme, useTheme, useThemedStyles } from '../../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Signup'>;
 
 export default function SignupScreen({ navigation }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,7 +43,7 @@ export default function SignupScreen({ navigation }: Props) {
         <View style={styles.content}>
           <View style={styles.brand}>
             <View style={styles.logoBadge}>
-              <Ionicons name="flame" size={28} color={COLORS.accentText} />
+              <Flame size={28} color={t.colors.onAccent} />
             </View>
             <Text style={styles.title}>Create account</Text>
             <Text style={styles.subtitle}>Start your FitLoop journey</Text>
@@ -49,7 +51,7 @@ export default function SignupScreen({ navigation }: Props) {
 
           <TextField
             label="Email"
-            icon="mail-outline"
+            icon={Mail}
             placeholder="you@example.com"
             autoCapitalize="none"
             keyboardType="email-address"
@@ -58,7 +60,7 @@ export default function SignupScreen({ navigation }: Props) {
           />
           <TextField
             label="Password"
-            icon="lock-closed-outline"
+            icon={Lock}
             placeholder="min. 6 characters"
             secureTextEntry
             value={password}
@@ -87,25 +89,27 @@ export default function SignupScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   flex: { flex: 1 },
-  content: { flex: 1, justifyContent: 'center', padding: SPACING.xxl },
-  brand: { alignItems: 'center', marginBottom: SPACING.xxxl },
+  content: { flex: 1, justifyContent: 'center', padding: t.spacing.xxl },
+  brand: { alignItems: 'center', marginBottom: t.spacing.xxxl },
   logoBadge: {
     width: 56,
     height: 56,
     borderRadius: 18,
-    backgroundColor: COLORS.accent,
+    backgroundColor: t.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: t.spacing.lg,
   },
-  title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary },
-  subtitle: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: SPACING.xs },
-  submitButton: { marginTop: SPACING.sm },
-  linkRow: { marginTop: SPACING.xxl, alignItems: 'center' },
-  linkText: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
-  linkAccent: { color: COLORS.accent, fontWeight: '700' },
-  error: { color: COLORS.danger, marginBottom: SPACING.sm, ...TYPOGRAPHY.caption },
-  info: { color: COLORS.success, marginBottom: SPACING.sm, ...TYPOGRAPHY.caption },
+  title: { ...t.typography.h1, color: t.colors.textPrimary },
+  subtitle: { ...t.typography.body, color: t.colors.textSecondary, marginTop: t.spacing.xs },
+  submitButton: { marginTop: t.spacing.sm },
+  linkRow: { marginTop: t.spacing.xxl, alignItems: 'center' },
+  linkText: { ...t.typography.body, color: t.colors.textSecondary },
+  linkAccent: { color: t.colors.accentEmphasis, fontFamily: t.typography.bodyBold.fontFamily },
+  error: { color: t.colors.danger, marginBottom: t.spacing.sm, ...t.typography.caption },
+  info: { color: t.colors.success, marginBottom: t.spacing.sm, ...t.typography.caption },
 });
+}

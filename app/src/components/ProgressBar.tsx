@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
+import { Theme, useTheme, useThemedStyles } from '../theme';
 
 interface Props {
   label: string;
@@ -10,31 +10,46 @@ interface Props {
   color?: string;
 }
 
-export default function ProgressBar({ label, current, target, unit = '', color = COLORS.accent }: Props) {
+export default function ProgressBar({ label, current, target, unit = '', color }: Props) {
+  const theme = useTheme();
+  const styles = useThemedStyles(createStyles);
   const pct = target > 0 ? Math.min(1, current / target) : 0;
   return (
     <View style={styles.container}>
       <View style={styles.labelRow}>
         <Text style={styles.label}>{label}</Text>
         <Text style={styles.value}>
-          <Text style={{ color: COLORS.textPrimary, fontWeight: '800' }}>{Math.round(current)}</Text>
+          <Text style={styles.valueCurrent}>{Math.round(current)}</Text>
           {' / '}
           {Math.round(target)}
           {unit}
         </Text>
       </View>
       <View style={styles.track}>
-        <View style={[styles.fill, { width: `${pct * 100}%`, backgroundColor: color }]} />
+        <View
+          style={[
+            styles.fill,
+            { width: `${pct * 100}%`, backgroundColor: color ?? theme.colors.accent },
+          ]}
+        />
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { marginBottom: SPACING.lg },
-  labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.sm },
-  label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase' },
-  value: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
-  track: { height: 8, borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceHigh, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: RADIUS.full },
-});
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+    container: { marginBottom: t.spacing.lg },
+    labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: t.spacing.sm },
+    label: { ...t.typography.label, color: t.colors.textSecondary },
+    value: { ...t.typography.caption, fontVariant: ['tabular-nums'], color: t.colors.textSecondary },
+    valueCurrent: { color: t.colors.textPrimary, fontFamily: t.typography.bodyBold.fontFamily },
+    track: {
+      height: 8,
+      borderRadius: t.radii.full,
+      backgroundColor: t.colors.surfaceElevated,
+      overflow: 'hidden',
+    },
+    fill: { height: '100%', borderRadius: t.radii.full },
+  });
+}

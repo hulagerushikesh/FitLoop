@@ -4,13 +4,15 @@ import type { ProfileStackParamList } from './types';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import CalendarScreen from '../screens/calendar/CalendarScreen';
 import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
-import { stackScreenOptions } from '../theme/navigationTheme';
+import { useTheme } from '../theme';
+import { buildStackScreenOptions } from '../theme/navigationTheme';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
 export default function ProfileStackNavigator() {
+  const theme = useTheme();
   return (
-    <Stack.Navigator screenOptions={stackScreenOptions}>
+    <Stack.Navigator screenOptions={buildStackScreenOptions(theme)}>
       <Stack.Screen
         name="ProfileMain"
         component={ProfileScreen}

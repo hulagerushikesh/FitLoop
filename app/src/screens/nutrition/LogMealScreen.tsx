@@ -13,7 +13,8 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Ionicons } from '@expo/vector-icons';
+import { Bookmark, Camera, Check, MessageCircleMore, SquarePen, Trash2 } from 'lucide-react-native';
+import type { LucideIcon } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { NutritionStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
@@ -21,23 +22,25 @@ import { addFoodLog, deleteMeal, fetchMeals, logSavedMeal, saveMeal } from '../.
 import { analyzeMealText, analyzeMealPhoto } from '../../services/aiMeal';
 import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
-import Button from '../../components/Button';
+import { Button } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { MEAL_TYPE_OPTIONS } from '../../constants/nutritionOptions';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLogSource, Meal, MealType } from '../../types/database';
 
 type Props = NativeStackScreenProps<NutritionStackParamList, 'LogMeal'>;
 type Mode = 'manual' | 'text' | 'photo' | 'saved';
 
-const MODES: { value: Mode; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { value: 'manual', label: 'Manual', icon: 'create-outline' },
-  { value: 'text', label: 'Describe', icon: 'chatbubble-ellipses-outline' },
-  { value: 'photo', label: 'Photo', icon: 'camera-outline' },
-  { value: 'saved', label: 'Saved', icon: 'bookmark-outline' },
+const MODES: { value: Mode; label: string; icon: LucideIcon }[] = [
+  { value: 'manual', label: 'Manual', icon: SquarePen },
+  { value: 'text', label: 'Describe', icon: MessageCircleMore },
+  { value: 'photo', label: 'Photo', icon: Camera },
+  { value: 'saved', label: 'Saved', icon: Bookmark },
 ];
 
 export default function LogMealScreen({ navigation, route }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const [mode, setMode] = useState<Mode>(route.params?.mode ?? 'manual');
   const [mealType, setMealType] = useState<MealType>('snack');
@@ -209,7 +212,7 @@ export default function LogMealScreen({ navigation, route }: Props) {
                 style={[styles.modeButton, mode === m.value && styles.modeButtonActive]}
                 onPress={() => onSwitchMode(m.value)}
               >
-                <Ionicons name={m.icon} size={16} color={mode === m.value ? COLORS.accentText : COLORS.textSecondary} />
+                <m.icon size={16} color={mode === m.value ? t.colors.onAccent : t.colors.textSecondary} />
                 <Text style={[styles.modeButtonText, mode === m.value && styles.modeButtonTextActive]}>
                   {m.label}
                 </Text>
@@ -247,13 +250,13 @@ export default function LogMealScreen({ navigation, route }: Props) {
                 <Button label="Take photo" onPress={() => onPickPhoto(true)} variant="secondary" style={styles.photoButton} />
                 <Button label="Choose from library" onPress={() => onPickPhoto(false)} variant="secondary" style={styles.photoButton} />
               </View>
-              {analyzing ? <ActivityIndicator color={COLORS.accent} style={{ marginTop: SPACING.md }} /> : null}
+              {analyzing ? <ActivityIndicator color={t.colors.accent} style={{ marginTop: t.spacing.md }} /> : null}
             </>
           ) : null}
 
           {mode === 'saved' ? (
             loadingMeals ? (
-              <ActivityIndicator color={COLORS.accent} style={{ marginTop: SPACING.xl }} />
+              <ActivityIndicator color={t.colors.accent} style={{ marginTop: t.spacing.xl }} />
             ) : meals.length === 0 ? (
               <Text style={styles.empty}>No saved meals yet — log something and save it for reuse.</Text>
             ) : (
@@ -266,7 +269,7 @@ export default function LogMealScreen({ navigation, route }: Props) {
                     </Text>
                   </Pressable>
                   <Pressable onPress={() => onDeleteMealPreset(meal)} style={styles.deleteButton}>
-                    <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+                    <Trash2 size={18} color={t.colors.danger} />
                   </Pressable>
                 </View>
               ))
@@ -283,7 +286,7 @@ export default function LogMealScreen({ navigation, route }: Props) {
                   <TextInput
                     style={styles.macroInput}
                     placeholder="0"
-                    placeholderTextColor={COLORS.textTertiary}
+                    placeholderTextColor={t.colors.textTertiary}
                     keyboardType="number-pad"
                     value={calories}
                     onChangeText={setCalories}
@@ -294,7 +297,7 @@ export default function LogMealScreen({ navigation, route }: Props) {
                   <TextInput
                     style={styles.macroInput}
                     placeholder="0"
-                    placeholderTextColor={COLORS.textTertiary}
+                    placeholderTextColor={t.colors.textTertiary}
                     keyboardType="decimal-pad"
                     value={protein}
                     onChangeText={setProtein}
@@ -305,7 +308,7 @@ export default function LogMealScreen({ navigation, route }: Props) {
                   <TextInput
                     style={styles.macroInput}
                     placeholder="0"
-                    placeholderTextColor={COLORS.textTertiary}
+                    placeholderTextColor={t.colors.textTertiary}
                     keyboardType="decimal-pad"
                     value={carbs}
                     onChangeText={setCarbs}
@@ -316,7 +319,7 @@ export default function LogMealScreen({ navigation, route }: Props) {
                   <TextInput
                     style={styles.macroInput}
                     placeholder="0"
-                    placeholderTextColor={COLORS.textTertiary}
+                    placeholderTextColor={t.colors.textTertiary}
                     keyboardType="decimal-pad"
                     value={fat}
                     onChangeText={setFat}
@@ -326,7 +329,7 @@ export default function LogMealScreen({ navigation, route }: Props) {
 
               <Pressable style={styles.checkboxRow} onPress={() => setSaveAsMeal((v) => !v)}>
                 <View style={[styles.checkbox, saveAsMeal && styles.checkboxChecked]}>
-                  {saveAsMeal ? <Ionicons name="checkmark" size={14} color={COLORS.accentText} /> : null}
+                  {saveAsMeal ? <Check size={14} color={t.colors.onAccent} /> : null}
                 </View>
                 <Text style={styles.checkboxLabel}>Save as a reusable meal</Text>
               </Pressable>
@@ -350,66 +353,68 @@ export default function LogMealScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   flex: { flex: 1 },
-  container: { padding: SPACING.xxl, paddingBottom: 60 },
-  modeRow: { flexDirection: 'row', backgroundColor: COLORS.surface, borderRadius: RADIUS.md, padding: 4, marginBottom: SPACING.xl },
-  modeButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm },
-  modeButtonActive: { backgroundColor: COLORS.accent },
-  modeButtonText: { fontSize: 12, color: COLORS.textSecondary, fontWeight: '600' },
-  modeButtonTextActive: { color: COLORS.accentText },
-  label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: SPACING.md, textTransform: 'uppercase' },
-  macroRow: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm, marginBottom: SPACING.md },
+  container: { padding: t.spacing.xxl, paddingBottom: 60 },
+  modeRow: { flexDirection: 'row', backgroundColor: t.colors.surface, borderRadius: t.radii.md, padding: 4, marginBottom: t.spacing.xl },
+  modeButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: t.spacing.sm, borderRadius: t.radii.sm },
+  modeButtonActive: { backgroundColor: t.colors.accent },
+  modeButtonText: { fontSize: 12, color: t.colors.textSecondary, fontFamily: FONTS.semibold },
+  modeButtonTextActive: { color: t.colors.onAccent },
+  label: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, marginTop: t.spacing.md, textTransform: 'uppercase' },
+  macroRow: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.sm, marginBottom: t.spacing.md },
   macroField: { flex: 1, minWidth: 0 },
   macroFieldLabel: {
     fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.textTertiary,
+    fontFamily: FONTS.bold,
+    color: t.colors.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     marginBottom: 4,
   },
   macroInput: {
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    padding: SPACING.sm,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radii.md,
+    padding: t.spacing.sm,
     fontSize: 13,
-    color: COLORS.textPrimary,
+    color: t.colors.textPrimary,
   },
-  photoButtons: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  photoButtons: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.sm },
   photoButton: { flex: 1 },
-  photoPreview: { width: '100%', height: 200, borderRadius: RADIUS.lg, marginTop: SPACING.sm },
-  empty: { color: COLORS.textSecondary, marginTop: SPACING.xl, textAlign: 'center', ...TYPOGRAPHY.body },
+  photoPreview: { width: '100%', height: 200, borderRadius: t.radii.lg, marginTop: t.spacing.sm },
+  empty: { color: t.colors.textSecondary, marginTop: t.spacing.xl, textAlign: 'center', ...t.typography.body },
   mealRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    marginTop: SPACING.sm,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radii.md,
+    padding: t.spacing.md,
+    marginTop: t.spacing.sm,
   },
   mealInfo: { flex: 1 },
-  mealName: { ...TYPOGRAPHY.bodyBold, color: COLORS.textPrimary },
-  mealMacros: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 },
-  deleteButton: { padding: SPACING.sm },
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', marginTop: SPACING.lg },
+  mealName: { ...t.typography.bodyBold, color: t.colors.textPrimary },
+  mealMacros: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
+  deleteButton: { padding: t.spacing.sm },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', marginTop: t.spacing.lg },
   checkbox: {
     width: 22,
     height: 22,
     borderRadius: 6,
     borderWidth: 1.5,
-    borderColor: COLORS.border,
-    marginRight: SPACING.sm,
+    borderColor: t.colors.border,
+    marginRight: t.spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxChecked: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
-  checkboxLabel: { ...TYPOGRAPHY.body, color: COLORS.textPrimary },
-  logButton: { marginTop: SPACING.xl },
-  error: { color: COLORS.danger, marginTop: SPACING.lg, textAlign: 'center', ...TYPOGRAPHY.caption },
+  checkboxChecked: { backgroundColor: t.colors.accent, borderColor: t.colors.accent },
+  checkboxLabel: { ...t.typography.body, color: t.colors.textPrimary },
+  logButton: { marginTop: t.spacing.xl },
+  error: { color: t.colors.danger, marginTop: t.spacing.lg, textAlign: 'center', ...t.typography.caption },
 });
+}

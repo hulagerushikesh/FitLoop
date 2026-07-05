@@ -2,17 +2,17 @@ import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { History, Sparkles, Trash2 } from "lucide-react-native";
 import type { NutritionStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchDailyLogs, deleteFoodLog } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
 import ScreenContainer from '../../components/ScreenContainer';
-import Card from '../../components/Card';
-import Button from '../../components/Button';
+import { Card } from '../../components/ui';
+import { Button } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
 import { MEAL_TYPE_OPTIONS } from '../../constants/nutritionOptions';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLog, Goal, MealType } from '../../types/database';
 
 type Props = NativeStackScreenProps<NutritionStackParamList, 'NutritionHome'>;
@@ -25,6 +25,8 @@ const SOURCE_BADGE: Record<FoodLog['source'], boolean> = {
 };
 
 export default function NutritionHomeScreen({ navigation }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
@@ -53,7 +55,7 @@ export default function NutritionHomeScreen({ navigation }: Props) {
     navigation.setOptions({
       headerRight: () => (
         <Pressable onPress={() => navigation.navigate('NutritionHistory')} hitSlop={8} style={styles.historyButton}>
-          <Ionicons name="time-outline" size={22} color={COLORS.textPrimary} />
+          <History size={22} color={t.colors.textPrimary} />
         </Pressable>
       ),
     });
@@ -91,7 +93,7 @@ export default function NutritionHomeScreen({ navigation }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={t.colors.accent} />
       </ScreenContainer>
     );
   }
@@ -103,10 +105,10 @@ export default function NutritionHomeScreen({ navigation }: Props) {
 
         {goal ? (
           <Card style={styles.progressCard}>
-            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={COLORS.accent} />
-            <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={COLORS.protein} />
-            <ProgressBar label="Carbs" current={totals.carbs_g} target={goal.carbs_g} unit="g" color={COLORS.carbs} />
-            <ProgressBar label="Fat" current={totals.fat_g} target={goal.fat_g} unit="g" color={COLORS.fat} />
+            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={t.colors.accent} />
+            <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={t.colors.protein} />
+            <ProgressBar label="Carbs" current={totals.carbs_g} target={goal.carbs_g} unit="g" color={t.colors.carbs} />
+            <ProgressBar label="Fat" current={totals.fat_g} target={goal.fat_g} unit="g" color={t.colors.fat} />
           </Card>
         ) : (
           <Text style={styles.noGoal}>Finish onboarding to see targets here.</Text>
@@ -127,7 +129,7 @@ export default function NutritionHomeScreen({ navigation }: Props) {
                       </Text>
                       {SOURCE_BADGE[log.source] ? (
                         <View style={styles.aiBadge}>
-                          <Ionicons name="sparkles" size={10} color={COLORS.accentText} />
+                          <Sparkles size={10} color={t.colors.onAccent} />
                           <Text style={styles.aiBadgeText}>AI</Text>
                         </View>
                       ) : null}
@@ -137,7 +139,7 @@ export default function NutritionHomeScreen({ navigation }: Props) {
                     </Text>
                   </View>
                   <Pressable onPress={() => onDelete(log.id)} style={styles.deleteButton}>
-                    <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+                    <Trash2 size={18} color={t.colors.danger} />
                   </Pressable>
                 </View>
               ))
@@ -152,38 +154,40 @@ export default function NutritionHomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
-  container: { padding: SPACING.lg, paddingBottom: 110 },
-  progressCard: { marginBottom: SPACING.sm },
-  noGoal: { color: COLORS.textSecondary, marginBottom: SPACING.lg, ...TYPOGRAPHY.body },
-  section: { marginTop: SPACING.xl },
-  sectionTitle: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, textTransform: 'uppercase' },
-  emptyMeal: { color: COLORS.textTertiary, ...TYPOGRAPHY.caption },
+  container: { padding: t.spacing.lg, paddingBottom: 110 },
+  progressCard: { marginBottom: t.spacing.sm },
+  noGoal: { color: t.colors.textSecondary, marginBottom: t.spacing.lg, ...t.typography.body },
+  section: { marginTop: t.spacing.xl },
+  sectionTitle: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, textTransform: 'uppercase' },
+  emptyMeal: { color: t.colors.textTertiary, ...t.typography.caption },
   logRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SPACING.md,
+    paddingVertical: t.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: t.colors.border,
   },
-  logInfo: { flex: 1, marginRight: SPACING.sm },
-  logNameRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
-  logName: { ...TYPOGRAPHY.bodyBold, color: COLORS.textPrimary, flexShrink: 1 },
+  logInfo: { flex: 1, marginRight: t.spacing.sm },
+  logNameRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  logName: { ...t.typography.bodyBold, color: t.colors.textPrimary, flexShrink: 1 },
   aiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: COLORS.accent,
-    borderRadius: RADIUS.full,
+    backgroundColor: t.colors.accent,
+    borderRadius: t.radii.full,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  aiBadgeText: { fontSize: 10, fontWeight: '800', color: COLORS.accentText },
-  logMacros: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 },
-  deleteButton: { padding: SPACING.sm },
-  logButtonWrap: { position: 'absolute', bottom: SPACING.xl, left: SPACING.lg, right: SPACING.lg },
-  historyButton: { padding: SPACING.xs },
-  error: { color: COLORS.danger, marginBottom: SPACING.md, ...TYPOGRAPHY.caption },
+  aiBadgeText: { fontSize: 10, fontFamily: FONTS.extrabold, color: t.colors.onAccent },
+  logMacros: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
+  deleteButton: { padding: t.spacing.sm },
+  logButtonWrap: { position: 'absolute', bottom: t.spacing.xl, left: t.spacing.lg, right: t.spacing.lg },
+  historyButton: { padding: t.spacing.xs },
+  error: { color: t.colors.danger, marginBottom: t.spacing.md, ...t.typography.caption },
 });
+}

@@ -1,21 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { CirclePlus, Info, Search } from "lucide-react-native";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchExerciseLibrary, addCustomExercise } from '../../services/workouts';
 import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
-import Button from '../../components/Button';
+import { Button } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import { MUSCLE_GROUP_OPTIONS } from '../../constants/workoutTemplates';
 import type { Exercise, MuscleGroup } from '../../types/database';
 
 type Props = NativeStackScreenProps<WorkoutsStackParamList, 'ExerciseLibrary'>;
 
 export default function ExerciseLibraryScreen({ navigation, route }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const selectMode = route.params?.selectMode ?? false;
 
@@ -83,7 +85,7 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={t.colors.accent} />
       </ScreenContainer>
     );
   }
@@ -91,11 +93,11 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
   return (
     <ScreenContainer>
       <View style={styles.searchWrap}>
-        <Ionicons name="search" size={18} color={COLORS.textTertiary} style={styles.searchIcon} />
+        <Search size={18} color={t.colors.textTertiary} style={styles.searchIcon} />
         <TextInput
           style={styles.search}
           placeholder="Search exercises"
-          placeholderTextColor={COLORS.textTertiary}
+          placeholderTextColor={t.colors.textTertiary}
           value={query}
           onChangeText={setQuery}
         />
@@ -121,7 +123,7 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
                     style={styles.infoButton}
                     onPress={() => navigation.navigate('ExerciseDetail', { exerciseId: exercise.id })}
                   >
-                    <Ionicons name="information-circle-outline" size={20} color={COLORS.textSecondary} />
+                    <Info size={20} color={t.colors.textSecondary} />
                   </Pressable>
                 ) : null}
               </View>
@@ -148,7 +150,7 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
               </>
             ) : (
               <Pressable style={styles.addButton} onPress={() => setShowAddForm(true)}>
-                <Ionicons name="add-circle-outline" size={18} color={COLORS.accent} />
+                <CirclePlus size={18} color={t.colors.accent} />
                 <Text style={styles.addButtonText}>Add custom exercise</Text>
               </Pressable>
             )}
@@ -159,38 +161,40 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: SPACING.lg,
-    marginBottom: SPACING.sm,
-    backgroundColor: COLORS.surface,
+    margin: t.spacing.lg,
+    marginBottom: t.spacing.sm,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.lg,
+    borderColor: t.colors.border,
+    borderRadius: t.radii.md,
+    paddingHorizontal: t.spacing.lg,
   },
-  searchIcon: { marginRight: SPACING.sm },
-  search: { flex: 1, paddingVertical: SPACING.md, fontSize: 16, color: COLORS.textPrimary },
-  list: { paddingHorizontal: SPACING.lg, paddingBottom: 40 },
-  section: { marginTop: SPACING.lg },
-  sectionTitle: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase', marginBottom: SPACING.sm },
+  searchIcon: { marginRight: t.spacing.sm },
+  search: { flex: 1, paddingVertical: t.spacing.md, fontSize: 16, color: t.colors.textPrimary },
+  list: { paddingHorizontal: t.spacing.lg, paddingBottom: 40 },
+  section: { marginTop: t.spacing.lg },
+  sectionTitle: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase', marginBottom: t.spacing.sm },
   row: {
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: t.colors.border,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  rowMain: { flex: 1, paddingVertical: SPACING.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  infoButton: { padding: SPACING.sm },
-  rowText: { ...TYPOGRAPHY.body, color: COLORS.textPrimary },
-  rowSub: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary },
-  addSection: { marginTop: SPACING.xl },
-  addButton: { flexDirection: 'row', gap: SPACING.xs, alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.md },
-  addButtonText: { color: COLORS.accent, fontWeight: '600', fontSize: 15 },
-  saveButton: { marginTop: SPACING.sm },
-  error: { color: COLORS.danger, marginHorizontal: SPACING.lg, marginBottom: SPACING.sm, ...TYPOGRAPHY.caption },
+  rowMain: { flex: 1, paddingVertical: t.spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  infoButton: { padding: t.spacing.sm },
+  rowText: { ...t.typography.body, color: t.colors.textPrimary },
+  rowSub: { ...t.typography.caption, color: t.colors.textSecondary },
+  addSection: { marginTop: t.spacing.xl },
+  addButton: { flexDirection: 'row', gap: t.spacing.xs, alignItems: 'center', justifyContent: 'center', paddingVertical: t.spacing.md },
+  addButtonText: { color: t.colors.accent, fontFamily: FONTS.semibold, fontSize: 15 },
+  saveButton: { marginTop: t.spacing.sm },
+  error: { color: t.colors.danger, marginHorizontal: t.spacing.lg, marginBottom: t.spacing.sm, ...t.typography.caption },
 });
+}

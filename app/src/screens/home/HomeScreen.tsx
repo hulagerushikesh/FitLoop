@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import { Calendar, Dumbbell, Flame, UtensilsCrossed } from "lucide-react-native";
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -12,9 +12,9 @@ import { fetchDailyLogs } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
 import { fetchRoutines } from '../../services/workouts';
 import ScreenContainer from '../../components/ScreenContainer';
-import Card from '../../components/Card';
+import { Card } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLog, Goal, Workout } from '../../types/database';
 
 type Props = CompositeScreenProps<
@@ -25,6 +25,8 @@ type Props = CompositeScreenProps<
 const TODAY_WEEKDAY = new Date().getDay();
 
 export default function HomeScreen({ navigation }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const { profile } = useProfile();
   const [logs, setLogs] = useState<FoodLog[]>([]);
@@ -69,7 +71,7 @@ export default function HomeScreen({ navigation }: Props) {
         <Text style={styles.subGreeting}>Let's make today count.</Text>
 
         {loading ? (
-          <ActivityIndicator color={COLORS.accent} style={styles.loader} />
+          <ActivityIndicator color={t.colors.accent} style={styles.loader} />
         ) : goal ? (
           <Card style={styles.card} highlighted>
             <View style={styles.remainingRow}>
@@ -78,11 +80,11 @@ export default function HomeScreen({ navigation }: Props) {
                 <Text style={styles.remainingValue}>{remaining}</Text>
               </View>
               <View style={styles.energyBadge}>
-                <Ionicons name="flame" size={26} color={COLORS.energy} />
+                <Flame size={26} color={t.colors.energy} />
               </View>
             </View>
-            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={COLORS.accent} />
-            <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={COLORS.protein} />
+            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={t.colors.accent} />
+            <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={t.colors.protein} />
           </Card>
         ) : (
           <Card style={styles.card}>
@@ -96,7 +98,7 @@ export default function HomeScreen({ navigation }: Props) {
             style={styles.actionCard}
             onPress={() => navigation.navigate('Nutrition', { screen: 'LogMeal' })}
           >
-            <Ionicons name="restaurant" size={22} color={COLORS.accent} />
+            <UtensilsCrossed size={22} color={t.colors.accent} />
             <Text style={styles.actionLabel}>Log food</Text>
           </Pressable>
           <Pressable
@@ -110,14 +112,14 @@ export default function HomeScreen({ navigation }: Props) {
                 : navigation.navigate('Workouts', { screen: 'WorkoutsHome' })
             }
           >
-            <Ionicons name="barbell" size={22} color={COLORS.accent} />
+            <Dumbbell size={22} color={t.colors.accent} />
             <Text style={styles.actionLabel}>{todayRoutine ? `Start ${todayRoutine.name}` : 'Rest day'}</Text>
           </Pressable>
           <Pressable
             style={styles.actionCard}
             onPress={() => navigation.navigate('Profile', { screen: 'CalendarMain' })}
           >
-            <Ionicons name="calendar" size={22} color={COLORS.accent} />
+            <Calendar size={22} color={t.colors.accent} />
             <Text style={styles.actionLabel}>Calendar</Text>
           </Pressable>
         </View>
@@ -126,35 +128,37 @@ export default function HomeScreen({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: SPACING.xxl, paddingBottom: 60 },
-  greeting: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary },
-  subGreeting: { ...TYPOGRAPHY.body, color: COLORS.textSecondary, marginTop: SPACING.xs, marginBottom: SPACING.xxl },
-  loader: { marginTop: SPACING.xxl },
-  card: { marginBottom: SPACING.xl },
-  remainingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.lg },
-  remainingLabel: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase' },
-  remainingValue: { ...TYPOGRAPHY.display, color: COLORS.textPrimary, marginTop: SPACING.xs },
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+  container: { padding: t.spacing.xxl, paddingBottom: 60 },
+  greeting: { ...t.typography.h1, color: t.colors.textPrimary },
+  subGreeting: { ...t.typography.body, color: t.colors.textSecondary, marginTop: t.spacing.xs, marginBottom: t.spacing.xxl },
+  loader: { marginTop: t.spacing.xxl },
+  card: { marginBottom: t.spacing.xl },
+  remainingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.spacing.lg },
+  remainingLabel: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase' },
+  remainingValue: { ...t.typography.display, color: t.colors.textPrimary, marginTop: t.spacing.xs },
   energyBadge: {
     width: 48,
     height: 48,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.energyMuted,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.energyMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyText: { ...TYPOGRAPHY.body, color: COLORS.textSecondary },
-  sectionTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginBottom: SPACING.md },
-  quickActions: { flexDirection: 'row', gap: SPACING.md },
+  emptyText: { ...t.typography.body, color: t.colors.textSecondary },
+  sectionTitle: { ...t.typography.h3, color: t.colors.textPrimary, marginBottom: t.spacing.md },
+  quickActions: { flexDirection: 'row', gap: t.spacing.md },
   actionCard: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: t.colors.surface,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    paddingVertical: SPACING.lg,
+    borderColor: t.colors.border,
+    borderRadius: t.radii.lg,
+    paddingVertical: t.spacing.lg,
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: t.spacing.sm,
   },
-  actionLabel: { ...TYPOGRAPHY.caption, color: COLORS.textPrimary, textAlign: 'center' },
+  actionLabel: { ...t.typography.caption, color: t.colors.textPrimary, textAlign: 'center' },
 });
+}

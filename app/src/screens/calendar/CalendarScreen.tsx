@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { useAuth } from '../../hooks/useAuth';
 import { fetchMonthSummary, fetchSessionsForDate } from '../../services/calendar';
 import ScreenContainer from '../../components/ScreenContainer';
-import Card from '../../components/Card';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Card } from '../../components/ui';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { DailySummary, WorkoutSession } from '../../types/database';
 
 const MONTH_NAMES = [
@@ -46,6 +46,8 @@ function formatDateLong(date: string): string {
 }
 
 export default function CalendarScreen() {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const today = todayString();
   const [todayYear, todayMonth] = today.split('-').map(Number);
@@ -101,13 +103,13 @@ export default function CalendarScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
           <Pressable onPress={goPrevMonth} style={styles.navButton}>
-            <Ionicons name="chevron-back" size={22} color={COLORS.textPrimary} />
+            <ChevronLeft size={22} color={t.colors.textPrimary} />
           </Pressable>
           <Text style={styles.monthLabel}>
             {MONTH_NAMES[month - 1]} {year}
           </Text>
           <Pressable onPress={goNextMonth} style={styles.navButton}>
-            <Ionicons name="chevron-forward" size={22} color={COLORS.textPrimary} />
+            <ChevronRight size={22} color={t.colors.textPrimary} />
           </Pressable>
         </View>
 
@@ -120,7 +122,7 @@ export default function CalendarScreen() {
         </View>
 
         {loadingMonth ? (
-          <ActivityIndicator color={COLORS.accent} style={{ marginVertical: SPACING.xl }} />
+          <ActivityIndicator color={t.colors.accent} style={{ marginVertical: t.spacing.xl }} />
         ) : (
           weeks.map((week, wi) => (
             <View key={wi} style={styles.weekRow}>
@@ -158,7 +160,7 @@ export default function CalendarScreen() {
         <Card style={styles.detailCard}>
           <Text style={styles.detailTitle}>{formatDateLong(selectedDate)}</Text>
           {loadingDetail ? (
-            <ActivityIndicator color={COLORS.accent} style={{ marginTop: SPACING.md }} />
+            <ActivityIndicator color={t.colors.accent} style={{ marginTop: t.spacing.md }} />
           ) : (
             <>
               <View style={styles.statsRow}>
@@ -167,11 +169,11 @@ export default function CalendarScreen() {
                   <Text style={styles.statLabel}>kcal in</Text>
                 </View>
                 <View style={styles.statBox}>
-                  <Text style={[styles.statValue, { color: COLORS.energy }]}>{selectedSummary?.calories_burned ?? 0}</Text>
+                  <Text style={[styles.statValue, { color: t.colors.energy }]}>{selectedSummary?.calories_burned ?? 0}</Text>
                   <Text style={styles.statLabel}>kcal burned</Text>
                 </View>
                 <View style={styles.statBox}>
-                  <Text style={[styles.statValue, { color: COLORS.protein }]}>{selectedSummary?.protein_g ?? 0}g</Text>
+                  <Text style={[styles.statValue, { color: t.colors.protein }]}>{selectedSummary?.protein_g ?? 0}g</Text>
                   <Text style={styles.statLabel}>protein</Text>
                 </View>
               </View>
@@ -194,29 +196,31 @@ export default function CalendarScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { padding: SPACING.lg, paddingBottom: 60 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.md },
-  navButton: { padding: SPACING.sm },
-  monthLabel: { ...TYPOGRAPHY.h2, color: COLORS.textPrimary },
-  weekdayRow: { flexDirection: 'row', marginBottom: SPACING.xs },
-  weekdayText: { flex: 1, textAlign: 'center', fontSize: 12, color: COLORS.textTertiary, fontWeight: '700' },
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+  container: { padding: t.spacing.lg, paddingBottom: 60 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: t.spacing.md },
+  navButton: { padding: t.spacing.sm },
+  monthLabel: { ...t.typography.h2, color: t.colors.textPrimary },
+  weekdayRow: { flexDirection: 'row', marginBottom: t.spacing.xs },
+  weekdayText: { flex: 1, textAlign: 'center', fontSize: 12, color: t.colors.textTertiary, fontFamily: FONTS.bold },
   weekRow: { flexDirection: 'row' },
   dayCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  dayCellFilled: { borderRadius: RADIUS.md },
-  dayCellSelected: { backgroundColor: COLORS.accent },
-  dayNumText: { fontSize: 14, color: COLORS.textPrimary },
-  dayNumTextToday: { color: COLORS.accent, fontWeight: '800' },
-  dayNumTextSelected: { color: COLORS.accentText, fontWeight: '800' },
-  dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: COLORS.accent, marginTop: 2 },
-  dotSelected: { backgroundColor: COLORS.accentText },
-  detailCard: { marginTop: SPACING.xxl },
-  detailTitle: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginBottom: SPACING.lg },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: SPACING.xl },
+  dayCellFilled: { borderRadius: t.radii.md },
+  dayCellSelected: { backgroundColor: t.colors.accent },
+  dayNumText: { fontSize: 14, color: t.colors.textPrimary },
+  dayNumTextToday: { color: t.colors.accent, fontFamily: FONTS.extrabold },
+  dayNumTextSelected: { color: t.colors.onAccent, fontFamily: FONTS.extrabold },
+  dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: t.colors.accent, marginTop: 2 },
+  dotSelected: { backgroundColor: t.colors.onAccent },
+  detailCard: { marginTop: t.spacing.xxl },
+  detailTitle: { ...t.typography.h3, color: t.colors.textPrimary, marginBottom: t.spacing.lg },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: t.spacing.xl },
   statBox: { alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary },
-  statLabel: { fontSize: 11, color: COLORS.textSecondary, marginTop: 2 },
-  detailSubtitle: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase', marginTop: SPACING.md, marginBottom: SPACING.xs },
-  detailListItem: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, marginTop: SPACING.xs },
-  detailEmpty: { ...TYPOGRAPHY.caption, color: COLORS.textTertiary },
+  statValue: { fontSize: 20, fontFamily: FONTS.extrabold, color: t.colors.textPrimary },
+  statLabel: { fontSize: 11, color: t.colors.textSecondary, marginTop: 2 },
+  detailSubtitle: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase', marginTop: t.spacing.md, marginBottom: t.spacing.xs },
+  detailListItem: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.xs },
+  detailEmpty: { ...t.typography.caption, color: t.colors.textTertiary },
 });
+}

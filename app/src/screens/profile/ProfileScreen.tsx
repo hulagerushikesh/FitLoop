@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { BarChart3, Calendar, ChevronRight } from "lucide-react-native";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
@@ -9,8 +9,8 @@ import { fetchLatestGoal } from '../../services/goals';
 import OptionPicker from '../../components/OptionPicker';
 import Stepper from '../../components/Stepper';
 import TextField from '../../components/TextField';
-import Button from '../../components/Button';
-import Card from '../../components/Card';
+import { Button } from '../../components/ui';
+import { Card } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import {
   SEX_OPTIONS,
@@ -19,13 +19,15 @@ import {
   RATE_BOUNDS,
   formatRate,
 } from '../../constants/profileOptions';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { ActivityLevel, GoalType, Goal, Sex } from '../../types/database';
 import type { ProfileStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
 
 export default function ProfileScreen({ navigation }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user, signOut } = useAuth();
   const { profile, refresh } = useProfile();
 
@@ -112,10 +114,10 @@ export default function ProfileScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('CalendarMain')}
             >
               <View style={styles.menuIconWrap}>
-                <Ionicons name="calendar" size={18} color={COLORS.accent} />
+                <Calendar size={18} color={t.colors.accent} />
               </View>
               <Text style={styles.menuLabel}>Calendar</Text>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+              <ChevronRight size={18} color={t.colors.textTertiary} />
             </Pressable>
             <View style={styles.menuDivider} />
             <Pressable
@@ -123,10 +125,10 @@ export default function ProfileScreen({ navigation }: Props) {
               onPress={() => navigation.navigate('AnalyticsMain')}
             >
               <View style={styles.menuIconWrap}>
-                <Ionicons name="stats-chart" size={18} color={COLORS.accent} />
+                <BarChart3 size={18} color={t.colors.accent} />
               </View>
               <Text style={styles.menuLabel}>Analytics</Text>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+              <ChevronRight size={18} color={t.colors.textTertiary} />
             </Pressable>
           </Card>
 
@@ -137,7 +139,7 @@ export default function ProfileScreen({ navigation }: Props) {
           <TextField label="Height (cm)" keyboardType="decimal-pad" value={heightCm} onChangeText={setHeightCm} />
           <Text style={styles.label}>Current weight (kg)</Text>
           {loadingWeight ? (
-            <ActivityIndicator color={COLORS.accent} />
+            <ActivityIndicator color={t.colors.accent} />
           ) : (
             <TextField keyboardType="decimal-pad" value={weightKg} onChangeText={setWeightKg} />
           )}
@@ -162,38 +164,40 @@ export default function ProfileScreen({ navigation }: Props) {
           {saved ? <Text style={styles.success}>Saved!</Text> : null}
 
           <Button label="Save changes" onPress={onSave} loading={saving} style={styles.saveButton} />
-          <Button label="Log Out" onPress={signOut} variant="danger" style={styles.logoutButton} />
+          <Button label="Log Out" onPress={signOut} variant="destructive" style={styles.logoutButton} />
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   flex: { flex: 1 },
-  container: { flexGrow: 1, padding: SPACING.xxl },
-  email: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginBottom: SPACING.lg },
-  targetCard: { marginBottom: SPACING.lg },
-  targetLabel: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, textTransform: 'uppercase' },
-  targetCalories: { fontSize: 28, fontWeight: '800', color: COLORS.accent, marginTop: SPACING.xs },
-  targetMacros: { ...TYPOGRAPHY.body, color: COLORS.textPrimary, marginTop: SPACING.xs },
-  targetReason: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: SPACING.sm, fontStyle: 'italic' },
-  menuCard: { padding: 0, marginBottom: SPACING.lg, overflow: 'hidden' },
-  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: SPACING.md + 2, paddingHorizontal: SPACING.lg, gap: SPACING.md },
+  container: { flexGrow: 1, padding: t.spacing.xxl },
+  email: { ...t.typography.caption, color: t.colors.textSecondary, marginBottom: t.spacing.lg },
+  targetCard: { marginBottom: t.spacing.lg },
+  targetLabel: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase' },
+  targetCalories: { fontSize: 28, fontFamily: FONTS.extrabold, color: t.colors.accent, marginTop: t.spacing.xs },
+  targetMacros: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.xs },
+  targetReason: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.sm, fontStyle: 'italic' },
+  menuCard: { padding: 0, marginBottom: t.spacing.lg, overflow: 'hidden' },
+  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: t.spacing.md + 2, paddingHorizontal: t.spacing.lg, gap: t.spacing.md },
   menuIconWrap: {
     width: 34,
     height: 34,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.accentMuted,
+    borderRadius: t.radii.md,
+    backgroundColor: t.colors.accentMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  menuLabel: { ...TYPOGRAPHY.bodyBold, color: COLORS.textPrimary, flex: 1 },
-  menuDivider: { height: 1, backgroundColor: COLORS.border, marginLeft: SPACING.lg + 34 + SPACING.md },
-  section: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary, marginTop: SPACING.xl, marginBottom: SPACING.md },
-  label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: SPACING.md, textTransform: 'uppercase' },
-  saveButton: { marginTop: SPACING.xl },
-  logoutButton: { marginTop: SPACING.md, marginBottom: 40 },
-  error: { color: COLORS.danger, marginTop: SPACING.lg, textAlign: 'center', ...TYPOGRAPHY.caption },
-  success: { color: COLORS.success, marginTop: SPACING.lg, textAlign: 'center', ...TYPOGRAPHY.caption },
+  menuLabel: { ...t.typography.bodyBold, color: t.colors.textPrimary, flex: 1 },
+  menuDivider: { height: 1, backgroundColor: t.colors.border, marginLeft: t.spacing.lg + 34 + t.spacing.md },
+  section: { ...t.typography.h3, color: t.colors.textPrimary, marginTop: t.spacing.xl, marginBottom: t.spacing.md },
+  label: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, marginTop: t.spacing.md, textTransform: 'uppercase' },
+  saveButton: { marginTop: t.spacing.xl },
+  logoutButton: { marginTop: t.spacing.md, marginBottom: 40 },
+  error: { color: t.colors.danger, marginTop: t.spacing.lg, textAlign: 'center', ...t.typography.caption },
+  success: { color: t.colors.success, marginTop: t.spacing.lg, textAlign: 'center', ...t.typography.caption },
 });
+}

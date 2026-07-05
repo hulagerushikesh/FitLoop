@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
+import { Theme, useThemedStyles } from '../theme';
+import { tapHaptic } from '../utils/haptics';
 
 interface Props {
   /** Increment this to (re)start the timer, e.g. after logging a set. */
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function RestTimer({ startKey, defaultSeconds = 90 }: Props) {
+  const styles = useThemedStyles(createStyles);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [running, setRunning] = useState(false);
 
@@ -43,10 +45,22 @@ export default function RestTimer({ startKey, defaultSeconds = 90 }: Props) {
         </Text>
       </View>
       <View style={styles.row}>
-        <Pressable style={styles.button} onPress={() => setSecondsLeft((s) => s + 15)}>
+        <Pressable
+          style={styles.button}
+          onPress={() => {
+            tapHaptic();
+            setSecondsLeft((s) => s + 15);
+          }}
+        >
           <Text style={styles.buttonText}>+15s</Text>
         </Pressable>
-        <Pressable style={styles.skipButton} onPress={() => setRunning(false)}>
+        <Pressable
+          style={styles.skipButton}
+          onPress={() => {
+            tapHaptic();
+            setRunning(false);
+          }}
+        >
           <Text style={styles.skipButtonText}>Skip</Text>
         </Pressable>
       </View>
@@ -54,35 +68,41 @@ export default function RestTimer({ startKey, defaultSeconds = 90 }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.accentMuted,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    borderColor: COLORS.accent,
-    padding: SPACING.lg,
-    marginVertical: SPACING.md,
-  },
-  label: { ...TYPOGRAPHY.label, color: COLORS.accent },
-  time: { fontSize: 28, fontWeight: '800', color: COLORS.textPrimary },
-  row: { flexDirection: 'row', gap: SPACING.sm },
-  button: {
-    backgroundColor: COLORS.accent,
-    borderRadius: RADIUS.full,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-  },
-  buttonText: { color: COLORS.accentText, fontWeight: '700', fontSize: 13 },
-  skipButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: COLORS.textSecondary,
-    borderRadius: RADIUS.full,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-  },
-  skipButtonText: { color: COLORS.textPrimary, fontWeight: '700', fontSize: 13 },
-});
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: t.colors.accentMuted,
+      borderRadius: t.radii.lg,
+      borderWidth: 1,
+      borderColor: t.colors.accent,
+      padding: t.spacing.lg,
+      marginVertical: t.spacing.md,
+    },
+    label: { ...t.typography.label, color: t.colors.accentEmphasis },
+    time: { ...t.typography.stat, color: t.colors.textPrimary },
+    row: { flexDirection: 'row', gap: t.spacing.sm },
+    button: {
+      backgroundColor: t.colors.accent,
+      borderRadius: t.radii.full,
+      minHeight: 44,
+      justifyContent: 'center',
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+    },
+    buttonText: { ...t.typography.bodySmall, fontFamily: t.typography.bodyBold.fontFamily, color: t.colors.onAccent },
+    skipButton: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: t.colors.textSecondary,
+      borderRadius: t.radii.full,
+      minHeight: 44,
+      justifyContent: 'center',
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+    },
+    skipButtonText: { ...t.typography.bodySmall, fontFamily: t.typography.bodyBold.fontFamily, color: t.colors.textPrimary },
+  });
+}

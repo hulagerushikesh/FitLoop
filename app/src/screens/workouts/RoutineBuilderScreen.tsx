@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ChevronDown, ChevronUp, Plus, X } from "lucide-react-native";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
@@ -27,11 +27,11 @@ import {
 } from '../../services/workouts';
 import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
-import Button from '../../components/Button';
-import Card from '../../components/Card';
+import { Button } from '../../components/ui';
+import { Card } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { SPLIT_TYPE_OPTIONS, SPLIT_TEMPLATE_EXERCISE_NAMES, DAY_LABELS_SHORT } from '../../constants/workoutTemplates';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { Exercise, SplitType } from '../../types/database';
 
 type Props = NativeStackScreenProps<WorkoutsStackParamList, 'RoutineBuilder'>;
@@ -43,6 +43,8 @@ interface DraftExercise {
 }
 
 export default function RoutineBuilderScreen({ navigation, route }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const workoutId = route.params?.workoutId;
   const isEditing = !!workoutId;
@@ -191,7 +193,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
   if (loading) {
     return (
       <ScreenContainer style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={t.colors.accent} />
       </ScreenContainer>
     );
   }
@@ -224,7 +226,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
           <View style={styles.exercisesHeader}>
             <Text style={styles.label}>Exercises</Text>
             <Pressable style={styles.addLinkRow} onPress={() => navigation.navigate('ExerciseLibrary', { selectMode: true })}>
-              <Ionicons name="add" size={16} color={COLORS.accent} />
+              <Plus size={16} color={t.colors.accent} />
               <Text style={styles.addLink}>Add exercise</Text>
             </Pressable>
           </View>
@@ -247,7 +249,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
                       </Pressable>
                       <TextInput
                         style={styles.repsInput}
-                        placeholderTextColor={COLORS.textTertiary}
+                        placeholderTextColor={t.colors.textTertiary}
                         keyboardType="number-pad"
                         value={d.target_reps?.toString() ?? ''}
                         onChangeText={(t) => updateReps(i, t)}
@@ -257,13 +259,13 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
                   </View>
                   <View style={styles.reorderControls}>
                     <Pressable onPress={() => moveExercise(i, -1)} style={styles.iconButton}>
-                      <Ionicons name="chevron-up" size={16} color={COLORS.textPrimary} />
+                      <ChevronUp size={16} color={t.colors.textPrimary} />
                     </Pressable>
                     <Pressable onPress={() => moveExercise(i, 1)} style={styles.iconButton}>
-                      <Ionicons name="chevron-down" size={16} color={COLORS.textPrimary} />
+                      <ChevronDown size={16} color={t.colors.textPrimary} />
                     </Pressable>
                     <Pressable onPress={() => removeExercise(i)} style={styles.removeButton}>
-                      <Ionicons name="close" size={16} color={COLORS.danger} />
+                      <X size={16} color={t.colors.danger} />
                     </Pressable>
                   </View>
                 </View>
@@ -275,7 +277,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
 
           <Button label="Save routine" onPress={onSave} disabled={!canSave} loading={saving} style={styles.saveButton} />
           {isEditing ? (
-            <Button label="Delete routine" onPress={onDelete} variant="danger" loading={deleting} style={styles.deleteRoutineButton} />
+            <Button label="Delete routine" onPress={onDelete} variant="destructive" loading={deleting} style={styles.deleteRoutineButton} />
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -283,72 +285,74 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   flex: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center' },
-  container: { padding: SPACING.xxl, paddingBottom: 60 },
-  label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: SPACING.md, textTransform: 'uppercase' },
-  dayRow: { flexDirection: 'row', gap: SPACING.xs, marginBottom: SPACING.sm },
+  container: { padding: t.spacing.xxl, paddingBottom: 60 },
+  label: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, marginTop: t.spacing.md, textTransform: 'uppercase' },
+  dayRow: { flexDirection: 'row', gap: t.spacing.xs, marginBottom: t.spacing.sm },
   dayPill: {
     flex: 1,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md,
+    paddingVertical: t.spacing.sm,
+    borderRadius: t.radii.md,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
     alignItems: 'center',
   },
-  dayPillActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
-  dayPillText: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary },
-  dayPillTextActive: { color: COLORS.accentText },
-  exercisesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: SPACING.xl },
+  dayPillActive: { backgroundColor: t.colors.accent, borderColor: t.colors.accent },
+  dayPillText: { fontSize: 12, fontFamily: FONTS.bold, color: t.colors.textSecondary },
+  dayPillTextActive: { color: t.colors.onAccent },
+  exercisesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: t.spacing.xl },
   addLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  addLink: { color: COLORS.accent, fontWeight: '700' },
-  empty: { color: COLORS.textSecondary, ...TYPOGRAPHY.caption, marginTop: SPACING.md },
-  exerciseCard: { marginTop: SPACING.sm, padding: SPACING.md },
+  addLink: { color: t.colors.accent, fontFamily: FONTS.bold },
+  empty: { color: t.colors.textSecondary, ...t.typography.caption, marginTop: t.spacing.md },
+  exerciseCard: { marginTop: t.spacing.sm, padding: t.spacing.md },
   exerciseRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   exerciseInfo: { flex: 1 },
-  exerciseName: { ...TYPOGRAPHY.bodyBold, color: COLORS.textPrimary, marginBottom: SPACING.sm },
-  exerciseControls: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  setsText: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, minWidth: 50 },
+  exerciseName: { ...t.typography.bodyBold, color: t.colors.textPrimary, marginBottom: t.spacing.sm },
+  exerciseControls: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
+  setsText: { ...t.typography.caption, color: t.colors.textSecondary, minWidth: 50 },
   repsInput: {
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceHigh,
-    borderRadius: RADIUS.sm,
-    paddingHorizontal: SPACING.sm,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surfaceElevated,
+    borderRadius: t.radii.sm,
+    paddingHorizontal: t.spacing.sm,
     paddingVertical: 4,
     width: 60,
     fontSize: 13,
-    color: COLORS.textPrimary,
+    color: t.colors.textPrimary,
   },
-  reorderControls: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginLeft: SPACING.sm },
+  reorderControls: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, marginLeft: t.spacing.sm },
   smallButton: {
     width: 28,
     height: 28,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.accent,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  smallButtonText: { fontSize: 14, fontWeight: '700', color: COLORS.accentText },
+  smallButtonText: { fontSize: 14, fontFamily: FONTS.bold, color: t.colors.onAccent },
   iconButton: {
     width: 28,
     height: 28,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.surfaceHigh,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.surfaceElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },
   removeButton: {
     width: 28,
     height: 28,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.dangerMuted,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.dangerMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  saveButton: { marginTop: SPACING.xl },
-  deleteRoutineButton: { marginTop: SPACING.md, marginBottom: SPACING.xl },
-  error: { color: COLORS.danger, marginTop: SPACING.lg, textAlign: 'center', ...TYPOGRAPHY.caption },
+  saveButton: { marginTop: t.spacing.xl },
+  deleteRoutineButton: { marginTop: t.spacing.md, marginBottom: t.spacing.xl },
+  error: { color: t.colors.danger, marginTop: t.spacing.lg, textAlign: 'center', ...t.typography.caption },
 });
+}

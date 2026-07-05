@@ -5,15 +5,17 @@ import type { OnboardingStackParamList } from '../../navigation/types';
 import { useOnboardingDraft } from './OnboardingContext';
 import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
-import Button from '../../components/Button';
+import { Button } from '../../components/ui';
 import StepProgress from '../../components/StepProgress';
 import ScreenContainer from '../../components/ScreenContainer';
 import { SEX_OPTIONS } from '../../constants/profileOptions';
-import { COLORS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Theme, useTheme, useThemedStyles } from '../../theme';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Basics'>;
 
 export default function BasicsStep({ navigation }: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { draft, update } = useOnboardingDraft();
   const [age, setAge] = useState(draft.age?.toString() ?? '');
   const [heightCm, setHeightCm] = useState(draft.height_cm?.toString() ?? '');
@@ -78,10 +80,12 @@ export default function BasicsStep({ navigation }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles(t: Theme) {
+  return StyleSheet.create({
   flex: { flex: 1 },
-  container: { flexGrow: 1, padding: SPACING.xxl, paddingTop: SPACING.xxxl + SPACING.md },
-  title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary, marginBottom: SPACING.xl },
-  label: { ...TYPOGRAPHY.label, color: COLORS.textSecondary, marginBottom: SPACING.sm, marginTop: SPACING.md, textTransform: 'uppercase' },
-  button: { marginTop: SPACING.xl },
+  container: { flexGrow: 1, padding: t.spacing.xxl, paddingTop: t.spacing.xxxl + t.spacing.md },
+  title: { ...t.typography.h1, color: t.colors.textPrimary, marginBottom: t.spacing.xl },
+  label: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, marginTop: t.spacing.md, textTransform: 'uppercase' },
+  button: { marginTop: t.spacing.xl },
 });
+}

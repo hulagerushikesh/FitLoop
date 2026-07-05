@@ -6,18 +6,20 @@ import { useProfile } from '../hooks/useProfile';
 import AuthNavigator from './AuthNavigator';
 import OnboardingNavigator from './OnboardingNavigator';
 import MainTabNavigator from './MainTabNavigator';
-import Button from '../components/Button';
-import { COLORS, SPACING } from '../theme/theme';
-import { navigationTheme } from '../theme/navigationTheme';
+import { Button } from '../components/ui';
+import { Theme, useTheme, useThemedStyles } from '../theme';
+import { buildNavigationTheme } from '../theme/navigationTheme';
 
 export default function RootNavigator() {
+  const theme = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { session, loading: authLoading } = useAuth();
   const { profile, loading: profileLoading, error, refresh } = useProfile();
 
   if (authLoading || (session && profileLoading)) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.accent} />
+        <ActivityIndicator size="large" color={theme.colors.accent} />
       </View>
     );
   }
@@ -32,7 +34,7 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer theme={buildNavigationTheme(theme)}>
       {!session ? (
         <AuthNavigator />
       ) : !profile?.onboarding_completed ? (
@@ -44,13 +46,15 @@ export default function RootNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: SPACING.xxl,
-    backgroundColor: COLORS.background,
-  },
-  error: { color: COLORS.danger, marginBottom: SPACING.lg, textAlign: 'center' },
-});
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+    center: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: t.spacing.xl,
+      backgroundColor: t.colors.background,
+    },
+    error: { ...t.typography.body, color: t.colors.danger, marginBottom: t.spacing.lg, textAlign: 'center' },
+  });
+}

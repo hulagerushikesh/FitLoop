@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { COLORS, RADIUS, SPACING, TYPOGRAPHY } from '../theme/theme';
+import { CheckCircle2 } from 'lucide-react-native';
+import { Theme, useTheme, useThemedStyles } from '../theme';
+import { tapHaptic } from '../utils/haptics';
 
 export interface Option<T extends string> {
   value: T;
@@ -20,6 +21,8 @@ export default function OptionPicker<T extends string>({
   selected,
   onSelect,
 }: Props<T>) {
+  const theme = useTheme();
+  const styles = useThemedStyles(createStyles);
   return (
     <View>
       {options.map((opt) => {
@@ -28,7 +31,12 @@ export default function OptionPicker<T extends string>({
           <Pressable
             key={opt.value}
             style={[styles.option, active && styles.optionActive]}
-            onPress={() => onSelect(opt.value)}
+            onPress={() => {
+              tapHaptic();
+              onSelect(opt.value);
+            }}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
           >
             <View style={styles.textColumn}>
               <Text style={[styles.label, active && styles.labelActive]}>{opt.label}</Text>
@@ -38,7 +46,7 @@ export default function OptionPicker<T extends string>({
                 </Text>
               ) : null}
             </View>
-            {active ? <Ionicons name="checkmark-circle" size={22} color={COLORS.accent} /> : null}
+            {active ? <CheckCircle2 size={22} color={theme.colors.accentEmphasis} /> : null}
           </Pressable>
         );
       })}
@@ -46,22 +54,24 @@ export default function OptionPicker<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.surface,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    padding: SPACING.lg,
-    marginBottom: SPACING.sm,
-  },
-  optionActive: { borderColor: COLORS.accent, backgroundColor: COLORS.accentMuted },
-  textColumn: { flex: 1 },
-  label: { ...TYPOGRAPHY.h3, color: COLORS.textPrimary },
-  labelActive: { color: COLORS.accent },
-  description: { ...TYPOGRAPHY.caption, color: COLORS.textSecondary, marginTop: 2 },
-  descriptionActive: { color: COLORS.textPrimary },
-});
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+    option: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: t.colors.surface,
+      borderWidth: 1.5,
+      borderColor: t.colors.border,
+      borderRadius: t.radii.md,
+      padding: t.spacing.lg,
+      marginBottom: t.spacing.sm,
+    },
+    optionActive: { borderColor: t.colors.accent, backgroundColor: t.colors.accentMuted },
+    textColumn: { flex: 1 },
+    label: { ...t.typography.h3, color: t.colors.textPrimary },
+    labelActive: { color: t.colors.accentEmphasis },
+    description: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
+    descriptionActive: { color: t.colors.textPrimary },
+  });
+}

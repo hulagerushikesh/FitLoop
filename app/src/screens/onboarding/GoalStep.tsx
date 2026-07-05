@@ -5,7 +5,7 @@ import type { OnboardingStackParamList } from '../../navigation/types';
 import { useOnboardingDraft } from './OnboardingContext';
 import OptionPicker from '../../components/OptionPicker';
 import Stepper from '../../components/Stepper';
-import Button from '../../components/Button';
+import { Button } from '../../components/ui';
 import StepProgress from '../../components/StepProgress';
 import ScreenContainer from '../../components/ScreenContainer';
 import { useAuth } from '../../hooks/useAuth';
@@ -15,12 +15,14 @@ import { insertGoal } from '../../services/goals';
 import { seedStandardPlan } from '../../services/workouts';
 import { computeInitialTargets } from '../../engine/calorieEngine';
 import { GOAL_OPTIONS, RATE_BOUNDS, formatRate } from '../../constants/profileOptions';
-import { COLORS, SPACING, TYPOGRAPHY } from '../../theme/theme';
+import { Theme, useTheme, useThemedStyles } from '../../theme';
 import type { GoalType } from '../../types/database';
 
 type Props = NativeStackScreenProps<OnboardingStackParamList, 'Goal'>;
 
 export default function GoalStep(_props: Props) {
+  const t = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { draft, update } = useOnboardingDraft();
   const { user } = useAuth();
   const { refresh } = useProfile();
@@ -119,17 +121,19 @@ export default function GoalStep(_props: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: SPACING.xxl, paddingTop: SPACING.xxxl + SPACING.md },
-  title: { ...TYPOGRAPHY.h1, color: COLORS.textPrimary, marginBottom: SPACING.xl },
+function createStyles(t: Theme) {
+  return StyleSheet.create({
+  container: { flexGrow: 1, padding: t.spacing.xxl, paddingTop: t.spacing.xxxl + t.spacing.md },
+  title: { ...t.typography.h1, color: t.colors.textPrimary, marginBottom: t.spacing.xl },
   label: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.md,
-    marginTop: SPACING.sm,
+    ...t.typography.label,
+    color: t.colors.textSecondary,
+    marginBottom: t.spacing.md,
+    marginTop: t.spacing.sm,
     textAlign: 'center',
     textTransform: 'uppercase',
   },
-  button: { marginTop: SPACING.xl },
-  error: { color: COLORS.danger, marginTop: SPACING.md, textAlign: 'center', ...TYPOGRAPHY.caption },
+  button: { marginTop: t.spacing.xl },
+  error: { color: t.colors.danger, marginTop: t.spacing.md, textAlign: 'center', ...t.typography.caption },
 });
+}
