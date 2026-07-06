@@ -40,6 +40,17 @@ export default function DayDetailSheet({ visible, date, summary, onClose }: Prop
       .finally(() => setLoading(false));
   }, [visible, user, date]);
 
+  // Show each workout once — a day can have duplicate sessions of the same
+  // routine (e.g. a session resumed/re-created), but the day summary should
+  // just say what you trained, like "Leg day", not repeat it.
+  const uniqueWorkouts: WorkoutSession[] = [];
+  const seenNames = new Set<string>();
+  for (const s of sessions) {
+    if (seenNames.has(s.name)) continue;
+    seenNames.add(s.name);
+    uniqueWorkouts.push(s);
+  }
+
   const body = (
     <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
@@ -75,10 +86,10 @@ export default function DayDetailSheet({ visible, date, summary, onClose }: Prop
           <Text style={styles.subtitle}>Workouts</Text>
           {loading ? (
             <ActivityIndicator color={t.colors.accentEmphasis} style={{ marginTop: t.spacing.sm }} />
-          ) : sessions.length === 0 ? (
+          ) : uniqueWorkouts.length === 0 ? (
             <Text style={styles.empty}>No workout logged</Text>
           ) : (
-            sessions.map((s) => (
+            uniqueWorkouts.map((s) => (
               <View key={s.id} style={styles.workoutRow}>
                 <Dumbbell size={16} color={t.colors.accentEmphasis} />
                 <Text style={styles.workoutName}>{s.name}</Text>
@@ -132,13 +143,27 @@ function Stat({
 }
 
 function createStyles(t: Theme) {
+  const isWeb = Platform.OS === 'web';
   return StyleSheet.create({
     webOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 },
-    backdrop: { flex: 1, backgroundColor: t.colors.overlay, justifyContent: 'flex-end' },
+    // Native: bottom sheet. Web: a centered, width-capped card so it never
+    // stretches across a wide browser window or detaches at the viewport edge.
+    backdrop: {
+      flex: 1,
+      backgroundColor: t.colors.overlay,
+      justifyContent: isWeb ? 'center' : 'flex-end',
+      alignItems: 'center',
+      padding: isWeb ? t.spacing.xl : 0,
+    },
     sheet: {
+      width: '100%',
+      maxWidth: isWeb ? 420 : undefined,
+      alignSelf: 'center',
       backgroundColor: t.colors.surface,
       borderTopLeftRadius: t.radii.xl,
       borderTopRightRadius: t.radii.xl,
+      borderBottomLeftRadius: isWeb ? t.radii.xl : 0,
+      borderBottomRightRadius: isWeb ? t.radii.xl : 0,
       padding: t.spacing.xl,
       paddingBottom: t.spacing.xxl,
       gap: t.spacing.md,
@@ -150,6 +175,8 @@ function createStyles(t: Theme) {
       borderRadius: 2,
       backgroundColor: t.colors.border,
       marginBottom: t.spacing.sm,
+      // A drag handle only reads as a bottom sheet; hide it on the web card.
+      opacity: isWeb ? 0 : 1,
     },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     title: { ...t.typography.h3, color: t.colors.textPrimary },
