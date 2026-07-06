@@ -27,6 +27,7 @@ import {
   type RoutineExerciseRow,
 } from '../../services/workouts';
 import { enqueueSetLog } from '../../services/offlineQueue';
+import { appendSet, nextSetNumber, totalSets } from '../../engine/sessionSets';
 import { fetchLatestWeight } from '../../services/profile';
 import { useUnits } from '../../hooks/useUnits';
 import { estimateSessionCalories } from '../../engine/calorieBurn';
@@ -371,14 +372,11 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
 
   const onLogSet = async (exerciseId: string, input: LoggedSet) => {
     if (!user || !session) return;
-    const setNumber = (loggedSets[exerciseId]?.length ?? 0) + 1;
+    const setNumber = nextSetNumber(loggedSets, exerciseId);
 
     // Optimistically record the set locally first so a network drop never loses
     // it — the UI shows it immediately whether or not the write reaches Supabase.
-    setLoggedSets((prev) => ({
-      ...prev,
-      [exerciseId]: [...(prev[exerciseId] ?? []), input],
-    }));
+    setLoggedSets((prev) => appendSet(prev, exerciseId, input));
     setRestTimerKey((k) => k + 1);
 
     try {
@@ -407,7 +405,7 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   };
 
   const totalSetsLogged = useMemo(
-    () => Object.values(loggedSets).reduce((sum, sets) => sum + sets.length, 0),
+    () => totalSets(loggedSets),
     [loggedSets]
   );
 
