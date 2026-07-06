@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { CirclePlus, Info, Search } from "lucide-react-native";
+import { Camera, CirclePlus, Info, Search } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchExerciseLibrary, addCustomExercise } from '../../services/workouts';
+import { pickAndUploadImage } from '../../services/images';
 import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
-import { Button } from '../../components/ui';
+import { Button, Chip, useToast } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import { MUSCLE_GROUP_OPTIONS } from '../../constants/workoutTemplates';
@@ -27,6 +28,11 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState('');
   const [newMuscleGroup, setNewMuscleGroup] = useState<MuscleGroup | undefined>();
+  const [newCategory, setNewCategory] = useState<'compound' | 'isolation' | 'cardio' | undefined>();
+  const [newEquipment, setNewEquipment] = useState('');
+  const [newPhotoPath, setNewPhotoPath] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const { showToast } = useToast();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,15 +76,37 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await addCustomExercise(user.id, { name: newName.trim(), muscle_group: newMuscleGroup });
+      await addCustomExercise(user.id, {
+        name: newName.trim(),
+        muscle_group: newMuscleGroup,
+        category: newCategory ?? null,
+        equipment: newEquipment.trim() || null,
+        photo_path: newPhotoPath,
+      });
       setNewName('');
       setNewMuscleGroup(undefined);
+      setNewCategory(undefined);
+      setNewEquipment('');
+      setNewPhotoPath(null);
       setShowAddForm(false);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add exercise');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onPickPhoto = async () => {
+    if (!user || uploadingPhoto) return;
+    setUploadingPhoto(true);
+    try {
+      const path = await pickAndUploadImage('exercise-photos', user.id, 'exercise');
+      if (path) setNewPhotoPath(path);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Photo upload failed', 'error');
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -135,6 +163,24 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
             {showAddForm ? (
               <>
                 <TextField placeholder="Exercise name" value={newName} onChangeText={setNewName} />
+                <TextField placeholder="Equipment (optional)" value={newEquipment} onChangeText={setNewEquipment} />
+                <View style={styles.categoryRow}>
+                  {(['compound', 'isolation', 'cardio'] as const).map((c) => (
+                    <Chip
+                      key={c}
+                      label={c}
+                      selected={newCategory === c}
+                      onPress={() => setNewCategory(newCategory === c ? undefined : c)}
+                      style={styles.categoryChip}
+                    />
+                  ))}
+                </View>
+                <Pressable style={styles.photoButton} onPress={onPickPhoto}>
+                  <Camera size={16} color={t.colors.accentEmphasis} />
+                  <Text style={styles.photoButtonText}>
+                    {uploadingPhoto ? 'Uploading…' : newPhotoPath ? 'Photo added ✓' : 'Add photo (optional)'}
+                  </Text>
+                </Pressable>
                 <OptionPicker
                   options={MUSCLE_GROUP_OPTIONS}
                   selected={newMuscleGroup}
@@ -195,6 +241,18 @@ function createStyles(t: Theme) {
   addButton: { flexDirection: 'row', gap: t.spacing.xs, alignItems: 'center', justifyContent: 'center', paddingVertical: t.spacing.md },
   addButtonText: { color: t.colors.accentEmphasis, fontFamily: FONTS.semibold, fontSize: 15 },
   saveButton: { marginTop: t.spacing.sm },
+  categoryRow: { flexDirection: 'row', gap: t.spacing.sm, marginBottom: t.spacing.md },
+  categoryChip: { flex: 1, justifyContent: 'center' },
+  photoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: t.spacing.xs,
+    paddingVertical: t.spacing.sm,
+    marginBottom: t.spacing.md,
+    minHeight: 44,
+  },
+  photoButtonText: { ...t.typography.bodySmall, color: t.colors.accentEmphasis },
   error: { color: t.colors.danger, marginHorizontal: t.spacing.lg, marginBottom: t.spacing.sm, ...t.typography.caption },
 });
 }

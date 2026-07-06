@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Calendar, Dumbbell, Flame, UtensilsCrossed } from 'lucide-react-native';
+import { Calendar, Circle, Dumbbell, Flame, UtensilsCrossed } from 'lucide-react-native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -10,12 +10,18 @@ import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
 import { fetchDailyLogs } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
-import { fetchRoutines } from '../../services/workouts';
+import { fetchMuscleFatigue, fetchRoutineMuscleGroups, fetchRoutines } from '../../services/workouts';
 import ScreenContainer from '../../components/ScreenContainer';
-import { Card, CountUp, ProgressRing, SkeletonCard } from '../../components/ui';
+import { Card, Chip, CountUp, ProgressRing, SkeletonCard } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
 import { Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLog, Goal, Workout } from '../../types/database';
+import {
+  computeRecoveryStates,
+  rankRoutinesByRecovery,
+  type MuscleRecoveryState,
+  type RankedRoutine,
+} from '../../engine/muscleRecovery';
 
 type Props = CompositeScreenProps<
   NativeStackScreenProps<HomeStackParamList, 'HomeMain'>,
@@ -32,16 +38,29 @@ export default function HomeScreen({ navigation }: Props) {
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [todayRoutine, setTodayRoutine] = useState<Workout | null>(null);
+  const [recoveryStates, setRecoveryStates] = useState<MuscleRecoveryState[]>([]);
+  const [suggested, setSuggested] = useState<RankedRoutine | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     if (!user) return;
     setLoading(true);
-    Promise.all([fetchDailyLogs(user.id), fetchLatestGoal(user.id), fetchRoutines(user.id)])
-      .then(([l, g, routines]) => {
+    Promise.all([
+      fetchDailyLogs(user.id),
+      fetchLatestGoal(user.id),
+      fetchRoutines(user.id),
+      fetchMuscleFatigue(user.id).catch(() => []),
+      fetchRoutineMuscleGroups(user.id).catch(() => []),
+    ])
+      .then(([l, g, routines, fatigue, routineGroups]) => {
         setLogs(l);
         setGoal(g);
         setTodayRoutine(routines.find((r) => r.day_of_week === TODAY_WEEKDAY) ?? null);
+        const states = computeRecoveryStates(fatigue, new Date());
+        setRecoveryStates(states);
+        const trainedAnything = fatigue.length > 0;
+        const ranked = rankRoutinesByRecovery(routineGroups, states);
+        setSuggested(trainedAnything && ranked.length > 0 ? ranked[0] : null);
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -100,6 +119,48 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.emptyText}>Finish onboarding to see your daily targets here.</Text>
           </Card>
         )}
+
+        {recoveryStates.some((s) => s.status !== 'fresh') ? (
+          <>
+            <Text style={styles.sectionTitle}>Muscle recovery</Text>
+            <View style={styles.recoveryRow}>
+              {recoveryStates
+                .filter((s) => s.muscleGroup !== 'cardio' && s.muscleGroup !== 'full_body')
+                .map((s) => (
+                  <Chip
+                    key={s.muscleGroup}
+                    label={s.muscleGroup}
+                    accentColor={
+                      s.status === 'fresh'
+                        ? t.colors.success
+                        : s.status === 'recovering'
+                          ? t.colors.warning
+                          : t.colors.danger
+                    }
+                    icon={Circle}
+                    style={styles.recoveryChip}
+                  />
+                ))}
+            </View>
+            {suggested && !todayRoutine ? (
+              <Card
+                style={styles.suggestionCard}
+                onPress={() =>
+                  navigation.navigate('Workouts', {
+                    screen: 'WorkoutSession',
+                    params: { workoutId: suggested.id },
+                  })
+                }
+              >
+                <Text style={styles.suggestionLabel}>Best fit for today</Text>
+                <Text style={styles.suggestionName}>{suggested.name}</Text>
+                <Text style={styles.suggestionWhy}>
+                  {Math.round(suggested.score * 100)}% recovered muscle groups — tap to start
+                </Text>
+              </Card>
+            ) : null}
+          </>
+        ) : null}
 
         <Text style={styles.sectionTitle}>Quick actions</Text>
         <View style={styles.quickActions}>
@@ -166,6 +227,12 @@ function createStyles(t: Theme) {
     marginBottom: t.spacing.xs,
   },
   emptyText: { ...t.typography.body, color: t.colors.textSecondary },
+  recoveryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm, marginBottom: t.spacing.lg },
+  recoveryChip: { minHeight: 32, paddingVertical: 2 },
+  suggestionCard: { marginBottom: t.spacing.xl, borderColor: t.colors.accentEmphasis },
+  suggestionLabel: { ...t.typography.label, color: t.colors.textSecondary },
+  suggestionName: { ...t.typography.h3, color: t.colors.textPrimary, marginTop: t.spacing.xs },
+  suggestionWhy: { ...t.typography.caption, color: t.colors.accentEmphasis, marginTop: t.spacing.xs },
   sectionTitle: { ...t.typography.h3, color: t.colors.textPrimary, marginBottom: t.spacing.md },
   quickActions: { flexDirection: 'row', gap: t.spacing.md },
   actionCard: {

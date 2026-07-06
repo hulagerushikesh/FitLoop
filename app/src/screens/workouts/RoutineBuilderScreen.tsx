@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { ChevronDown, ChevronUp, Plus, X } from "lucide-react-native";
+import { ChevronDown, ChevronUp, Link as LinkIcon, Plus, X } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { confirm } from '../../utils/confirm';
@@ -40,6 +40,8 @@ interface DraftExercise {
   exercise: Exercise;
   target_sets: number;
   target_reps: number | null;
+  /** true = performed back-to-back with the exercise above (superset) */
+  linkedWithPrevious: boolean;
 }
 
 export default function RoutineBuilderScreen({ navigation, route }: Props) {
@@ -76,10 +78,14 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
         }
         if (routineExercises.length > 0) {
           setDraftExercises(
-            routineExercises.map((re) => ({
+            routineExercises.map((re, i) => ({
               exercise: re.exercise,
               target_sets: re.target_sets,
               target_reps: re.target_reps,
+              linkedWithPrevious:
+                i > 0 &&
+                re.superset_group != null &&
+                re.superset_group === routineExercises[i - 1].superset_group,
             }))
           );
         }
@@ -94,7 +100,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
     if (!selectedId) return;
     const exercise = library.find((e) => e.id === selectedId);
     if (exercise && !draftExercises.some((d) => d.exercise.id === selectedId)) {
-      setDraftExercises((prev) => [...prev, { exercise, target_sets: 3, target_reps: 10 }]);
+      setDraftExercises((prev) => [...prev, { exercise, target_sets: 3, target_reps: 10, linkedWithPrevious: false }]);
     }
     navigation.setParams({ selectedExerciseId: undefined });
   }, [route.params?.selectedExerciseId, library]);
@@ -106,7 +112,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
       const templateExercises = names
         .map((n) => library.find((e) => e.name === n))
         .filter((e): e is Exercise => !!e)
-        .map((exercise) => ({ exercise, target_sets: 3, target_reps: 10 }));
+        .map((exercise) => ({ exercise, target_sets: 3, target_reps: 10, linkedWithPrevious: false }));
       setDraftExercises(templateExercises);
     }
   };
@@ -123,6 +129,12 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
 
   const removeExercise = (index: number) => {
     setDraftExercises((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleLink = (index: number) => {
+    setDraftExercises((prev) =>
+      prev.map((d, i) => (i === index ? { ...d, linkedWithPrevious: !d.linkedWithPrevious } : d))
+    );
   };
 
   const updateSets = (index: number, delta: number) => {
@@ -143,11 +155,25 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
     setSaving(true);
     setError(null);
     try {
+      // Turn the per-row "linked with previous" flags into shared group ids:
+      // a chain of linked rows all get the same superset_group number.
+      let nextGroup = 1;
+      const groups: (number | null)[] = draftExercises.map(() => null);
+      draftExercises.forEach((d, i) => {
+        if (i === 0 || !d.linkedWithPrevious) return;
+        if (groups[i - 1] == null) {
+          groups[i - 1] = nextGroup;
+          nextGroup += 1;
+        }
+        groups[i] = groups[i - 1];
+      });
+
       const exercisePayload: RoutineExerciseInput[] = draftExercises.map((d, i) => ({
         exercise_id: d.exercise.id,
         order_index: i,
         target_sets: d.target_sets,
         target_reps: d.target_reps,
+        superset_group: groups[i],
       }));
 
       if (isEditing) {
@@ -233,7 +259,16 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
             <Text style={styles.empty}>No exercises yet — pick a split type for a starting point, or add exercises manually.</Text>
           ) : (
             draftExercises.map((d, i) => (
-              <Card key={d.exercise.id} style={styles.exerciseCard}>
+              <View key={d.exercise.id}>
+                {i > 0 ? (
+                  <Pressable style={styles.linkToggle} onPress={() => toggleLink(i)}>
+                    <LinkIcon size={13} color={d.linkedWithPrevious ? t.colors.accentEmphasis : t.colors.textTertiary} />
+                    <Text style={[styles.linkToggleText, d.linkedWithPrevious && styles.linkToggleTextActive]}>
+                      {d.linkedWithPrevious ? 'Superset with above' : 'Link as superset'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              <Card style={{ ...styles.exerciseCard, ...(d.linkedWithPrevious || draftExercises[i + 1]?.linkedWithPrevious ? styles.supersetCard : null) }}>
                 <View style={styles.exerciseRow}>
                   <View style={styles.exerciseInfo}>
                     <Text style={styles.exerciseName}>{d.exercise.name}</Text>
@@ -268,6 +303,7 @@ export default function RoutineBuilderScreen({ navigation, route }: Props) {
                   </View>
                 </View>
               </Card>
+              </View>
             ))
           )}
 
@@ -306,6 +342,17 @@ function createStyles(t: Theme) {
   addLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   addLink: { color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
   empty: { color: t.colors.textSecondary, ...t.typography.caption, marginTop: t.spacing.md },
+  linkToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.xs,
+    alignSelf: 'center',
+    paddingVertical: t.spacing.xs,
+    minHeight: 28,
+  },
+  linkToggleText: { ...t.typography.caption, color: t.colors.textTertiary },
+  linkToggleTextActive: { color: t.colors.accentEmphasis, fontFamily: t.typography.bodyBold.fontFamily },
+  supersetCard: { borderColor: t.colors.accentEmphasis, borderStyle: 'dashed' },
   exerciseCard: { marginTop: t.spacing.sm, padding: t.spacing.md },
   exerciseRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   exerciseInfo: { flex: 1 },

@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { STANDARD_PLAN } from '../constants/workoutTemplates';
-import type { Exercise, MuscleGroup, SplitType, Workout, WorkoutExercise, WorkoutLog, WorkoutSession } from '../types/database';
+import type { Exercise, MuscleGroup, MuscleGroupFatigue, SetType, SplitType, Workout, WorkoutExercise, WorkoutLog, WorkoutSession } from '../types/database';
 
 export async function fetchExerciseLibrary(userId: string): Promise<Exercise[]> {
   const { data, error } = await supabase
@@ -21,7 +21,13 @@ export async function fetchExerciseById(exerciseId: string): Promise<Exercise> {
 
 export async function addCustomExercise(
   userId: string,
-  input: { name: string; muscle_group: MuscleGroup; equipment?: string | null }
+  input: {
+    name: string;
+    muscle_group: MuscleGroup;
+    equipment?: string | null;
+    category?: 'compound' | 'isolation' | 'cardio' | null;
+    photo_path?: string | null;
+  }
 ): Promise<Exercise> {
   const { data, error } = await supabase
     .from('exercises')
@@ -67,6 +73,7 @@ export interface RoutineExerciseInput {
   order_index: number;
   target_sets: number;
   target_reps: number | null;
+  superset_group: number | null;
 }
 
 export async function createRoutine(
@@ -151,6 +158,7 @@ export async function seedStandardPlan(userId: string): Promise<void> {
         order_index: index,
         target_sets: 3,
         target_reps: 10,
+        superset_group: null,
       }));
 
     if (exercises.length === 0) continue;
@@ -227,7 +235,12 @@ export async function logSet(
   workoutId: string | null,
   exerciseId: string,
   setNumber: number,
-  input: { weight_kg: number | null; reps: number | null; rpe: number | null }
+  input: {
+    weight_kg: number | null;
+    reps: number | null;
+    rpe: number | null;
+    set_type?: SetType;
+  }
 ): Promise<WorkoutLog> {
   const { data, error } = await supabase
     .from('workout_logs')
@@ -271,4 +284,159 @@ export async function fetchLastSessionSets(
     .order('set_number', { ascending: true });
   if (error) throw error;
   return (data ?? []) as WorkoutLog[];
+}
+
+/**
+ * Historical best-set progression for one exercise: the top weight×reps set
+ * per session date, oldest first — feeds the per-exercise progress chart
+ * and PR detection.
+ */
+export interface ExerciseHistoryPoint {
+  date: string;
+  bestWeightKg: number;
+  bestReps: number;
+}
+
+export async function fetchExerciseHistory(
+  userId: string,
+  exerciseId: string,
+  limitSessions: number = 30
+): Promise<ExerciseHistoryPoint[]> {
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .select('weight_kg, reps, logged_at')
+    .eq('user_id', userId)
+    .eq('exercise_id', exerciseId)
+    .not('weight_kg', 'is', null)
+    .not('reps', 'is', null)
+    .order('logged_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+
+  const byDate = new Map<string, ExerciseHistoryPoint>();
+  for (const row of data ?? []) {
+    const date = (row.logged_at as string).slice(0, 10);
+    const existing = byDate.get(date);
+    const weight = row.weight_kg as number;
+    const reps = row.reps as number;
+    if (
+      !existing ||
+      weight > existing.bestWeightKg ||
+      (weight === existing.bestWeightKg && reps > existing.bestReps)
+    ) {
+      byDate.set(date, { date, bestWeightKg: weight, bestReps: reps });
+    }
+  }
+  return [...byDate.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-limitSessions);
+}
+
+/** All historical weighted sets for an exercise (for PR detection), excluding a session. */
+export async function fetchHistoricalSets(
+  userId: string,
+  exerciseId: string,
+  excludeSessionId: string
+): Promise<{ weightKg: number; reps: number }[]> {
+  const { data, error } = await supabase
+    .from('workout_logs')
+    .select('weight_kg, reps')
+    .eq('user_id', userId)
+    .eq('exercise_id', exerciseId)
+    .neq('session_id', excludeSessionId)
+    .not('weight_kg', 'is', null)
+    .not('reps', 'is', null)
+    .limit(1000);
+  if (error) throw error;
+  return (data ?? []).map((r) => ({ weightKg: r.weight_kg as number, reps: r.reps as number }));
+}
+
+// ============================================================================
+// Muscle recovery model (see engine/muscleRecovery.ts for the heuristics)
+// ============================================================================
+
+export async function fetchMuscleFatigue(userId: string): Promise<MuscleGroupFatigue[]> {
+  const { data, error } = await supabase
+    .from('muscle_group_fatigue')
+    .select('*')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return (data ?? []) as MuscleGroupFatigue[];
+}
+
+/**
+ * Refreshes muscle_group_fatigue after a completed session: stamps
+ * last_trained_at for every muscle group hit and recomputes 7-day rolling
+ * volume from workout_logs. Failures here must never block finishing a
+ * workout — call it fire-and-forget with a catch.
+ */
+export async function updateMuscleFatigueAfterSession(
+  userId: string,
+  sessionExercises: { muscleGroup: MuscleGroup; recoveryHours: number }[]
+): Promise<void> {
+  const groups = [...new Set(sessionExercises.map((e) => e.muscleGroup))];
+  if (groups.length === 0) return;
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3_600_000).toISOString();
+  const { data: recentLogs, error: logsError } = await supabase
+    .from('workout_logs')
+    .select('weight_kg, reps, exercise:exercises(muscle_group)')
+    .eq('user_id', userId)
+    .gte('logged_at', sevenDaysAgo)
+    .limit(2000);
+  if (logsError) throw logsError;
+
+  const volumeByGroup = new Map<string, number>();
+  for (const row of (recentLogs ?? []) as unknown as {
+    weight_kg: number | null;
+    reps: number | null;
+    exercise: { muscle_group: MuscleGroup } | null;
+  }[]) {
+    const group = row.exercise?.muscle_group;
+    if (!group) continue;
+    volumeByGroup.set(group, (volumeByGroup.get(group) ?? 0) + (row.weight_kg ?? 0) * (row.reps ?? 0));
+  }
+
+  const now = new Date().toISOString();
+  const recoveryByGroup = new Map(sessionExercises.map((e) => [e.muscleGroup, e.recoveryHours]));
+  const rows = groups.map((muscle_group) => ({
+    user_id: userId,
+    muscle_group,
+    last_trained_at: now,
+    estimated_recovery_hours: recoveryByGroup.get(muscle_group)!,
+    rolling_volume_7d: Math.round(volumeByGroup.get(muscle_group) ?? 0),
+    updated_at: now,
+  }));
+
+  const { error } = await supabase
+    .from('muscle_group_fatigue')
+    .upsert(rows, { onConflict: 'user_id,muscle_group' });
+  if (error) throw error;
+}
+
+/** Muscle groups each routine trains — feeds the recovery-aware ranking. */
+export async function fetchRoutineMuscleGroups(
+  userId: string
+): Promise<{ id: string; name: string; muscleGroups: MuscleGroup[] }[]> {
+  const { data, error } = await supabase
+    .from('workouts')
+    .select('id, name, workout_exercises(exercise:exercises(muscle_group))')
+    .eq('user_id', userId);
+  if (error) throw error;
+
+  return ((data ?? []) as unknown as {
+    id: string;
+    name: string;
+    workout_exercises: { exercise: { muscle_group: MuscleGroup } | null }[];
+  }[]).map((w) => ({
+    id: w.id,
+    name: w.name,
+    muscleGroups: [
+      ...new Set(
+        w.workout_exercises
+          .map((we) => we.exercise?.muscle_group)
+          .filter((g): g is MuscleGroup => !!g)
+      ),
+    ],
+  }));
 }

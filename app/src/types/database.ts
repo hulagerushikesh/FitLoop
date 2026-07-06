@@ -75,6 +75,7 @@ export interface Exercise {
   sort_order: number;
   met_value: number | null;
   instructions: string | null;
+  photo_path: string | null;
   created_at: string;
 }
 
@@ -95,6 +96,7 @@ export interface WorkoutExercise {
   order_index: number;
   target_sets: number;
   target_reps: number | null;
+  superset_group: number | null;
   created_at: string;
 }
 
@@ -110,6 +112,8 @@ export interface WorkoutSession {
   created_at: string;
 }
 
+export type SetType = 'normal' | 'drop' | 'failure';
+
 export interface WorkoutLog {
   id: string;
   user_id: string;
@@ -120,6 +124,7 @@ export interface WorkoutLog {
   weight_kg: number | null;
   reps: number | null;
   rpe: number | null;
+  set_type: SetType;
   logged_at: string;
 }
 
@@ -176,4 +181,13 @@ export interface DailySummary {
   fat_g: number;
   calories_burned: number;
   workout_count: number;
+}
+
+export interface MuscleGroupFatigue {
+  user_id: string;
+  muscle_group: MuscleGroup;
+  last_trained_at: string;
+  estimated_recovery_hours: number;
+  rolling_volume_7d: number;
+  updated_at: string;
 }
