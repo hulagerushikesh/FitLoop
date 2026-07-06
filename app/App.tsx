@@ -20,6 +20,7 @@ import {
   readEnabledPrefs,
   resyncAllNotifications,
 } from './src/services/notifications';
+import { initOfflineSync } from './src/services/offlineQueue';
 
 // Surface foregrounded notifications; no-op on web. Safe to run at module load.
 configureNotificationHandler();
@@ -66,6 +67,12 @@ function ThemedStatusBar() {
 // reminders are recomputed from current routines). No-op on web.
 function NotificationBootstrap() {
   const { user } = useAuth();
+
+  // Flush any queued offline set-log writes and listen for reconnects.
+  useEffect(() => {
+    initOfflineSync();
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     readEnabledPrefs().then((prefs) => resyncAllNotifications(user.id, prefs));

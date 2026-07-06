@@ -26,6 +26,7 @@ import {
   updateMuscleFatigueAfterSession,
   type RoutineExerciseRow,
 } from '../../services/workouts';
+import { enqueueSetLog } from '../../services/offlineQueue';
 import { fetchLatestWeight } from '../../services/profile';
 import { useUnits } from '../../hooks/useUnits';
 import { estimateSessionCalories } from '../../engine/calorieBurn';
@@ -371,23 +372,37 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   const onLogSet = async (exerciseId: string, input: LoggedSet) => {
     if (!user || !session) return;
     const setNumber = (loggedSets[exerciseId]?.length ?? 0) + 1;
+
+    // Optimistically record the set locally first so a network drop never loses
+    // it — the UI shows it immediately whether or not the write reaches Supabase.
+    setLoggedSets((prev) => ({
+      ...prev,
+      [exerciseId]: [...(prev[exerciseId] ?? []), input],
+    }));
+    setRestTimerKey((k) => k + 1);
+
     try {
       await logSet(user.id, session.id, workoutId, exerciseId, setNumber, input);
-      setLoggedSets((prev) => ({
-        ...prev,
-        [exerciseId]: [...(prev[exerciseId] ?? []), input],
-      }));
-      setRestTimerKey((k) => k + 1);
+    } catch {
+      // Likely offline mid-workout: queue the write to sync on reconnect rather
+      // than dropping the set the user just did.
+      await enqueueSetLog({
+        userId: user.id,
+        sessionId: session.id,
+        workoutId,
+        exerciseId,
+        setNumber,
+        input,
+      }).catch(() => {});
+      showToast('Saved offline — will sync when you reconnect', 'info');
+    }
 
-      const best = best1RmByExercise[exerciseId] ?? 0;
-      if (isNewPr(input.weight_kg, input.reps, best)) {
-        const newBest = estimateOneRepMax(input.weight_kg!, input.reps!);
-        setBest1RmByExercise((prev) => ({ ...prev, [exerciseId]: newBest }));
-        successHaptic();
-        showToast(`🎉 New PR — est. 1RM ${units.formatWeight(newBest)}!`);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to log set');
+    const best = best1RmByExercise[exerciseId] ?? 0;
+    if (isNewPr(input.weight_kg, input.reps, best)) {
+      const newBest = estimateOneRepMax(input.weight_kg!, input.reps!);
+      setBest1RmByExercise((prev) => ({ ...prev, [exerciseId]: newBest }));
+      successHaptic();
+      showToast(`🎉 New PR — est. 1RM ${units.formatWeight(newBest)}!`);
     }
   };
 

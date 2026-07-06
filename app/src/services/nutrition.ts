@@ -1,9 +1,14 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import type { DailySummary, FoodLog, FoodLogSource, Meal, MealItem, MealType } from '../types/database';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+// Read-through cache so a brief network drop doesn't blank out the day's food
+// logs the user already saw. Only the current day is worth caching.
+const dailyLogsCacheKey = (userId: string, date: string) => `fitloop.cache.foodLogs.${userId}.${date}`;
 
 /** Daily calorie/macro totals for the last `days` days (most recent first), for the Nutrition history view. */
 export async function fetchRecentSummary(userId: string, days: number = 30): Promise<DailySummary[]> {
@@ -23,14 +28,29 @@ export async function fetchRecentSummary(userId: string, days: number = 30): Pro
 }
 
 export async function fetchDailyLogs(userId: string, date: string = today()): Promise<FoodLog[]> {
-  const { data, error } = await supabase
-    .from('food_logs')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('logged_date', date)
-    .order('logged_at', { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as FoodLog[];
+  try {
+    const { data, error } = await supabase
+      .from('food_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('logged_date', date)
+      .order('logged_at', { ascending: true });
+    if (error) throw error;
+    const logs = (data ?? []) as FoodLog[];
+    // Refresh the cache for the current day only.
+    if (date === today()) {
+      AsyncStorage.setItem(dailyLogsCacheKey(userId, date), JSON.stringify(logs)).catch(() => {});
+    }
+    return logs;
+  } catch (e) {
+    // Offline / transient failure: fall back to the last-seen cache for today
+    // so the screen shows stale-but-useful data instead of an error/blank.
+    if (date === today()) {
+      const cached = await AsyncStorage.getItem(dailyLogsCacheKey(userId, date)).catch(() => null);
+      if (cached) return JSON.parse(cached) as FoodLog[];
+    }
+    throw e;
+  }
 }
 
 export interface NewFoodLogInput {
