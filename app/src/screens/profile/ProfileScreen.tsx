@@ -1,25 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { BarChart3, Calendar, ChevronRight } from "lucide-react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  BarChart3,
+  Calendar,
+  Camera,
+  Database,
+  Info,
+  Settings2,
+  UserCog,
+  UserRound,
+} from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
-import { updateProfile, fetchLatestWeight, logWeight } from '../../services/profile';
 import { fetchLatestGoal } from '../../services/goals';
-import OptionPicker from '../../components/OptionPicker';
-import Stepper from '../../components/Stepper';
-import TextField from '../../components/TextField';
-import { Button, Card, Chip } from '../../components/ui';
+import { avatarUrl, pickAndUploadAvatar } from '../../services/avatar';
+import MenuRow, { MenuDivider } from '../../components/MenuRow';
+import { Button, Card, useToast } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
-import {
-  SEX_OPTIONS,
-  ACTIVITY_OPTIONS,
-  GOAL_OPTIONS,
-  RATE_BOUNDS,
-  formatRate,
-} from '../../constants/profileOptions';
-import { FONTS, Theme, useTheme, useThemeMode, useThemedStyles } from '../../theme';
-import type { ActivityLevel, GoalType, Goal, Sex } from '../../types/database';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
+import type { Goal } from '../../types/database';
 import type { ProfileStackParamList } from '../../navigation/types';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'ProfileMain'>;
@@ -28,191 +28,148 @@ export default function ProfileScreen({ navigation }: Props) {
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
   const { user, signOut } = useAuth();
-  const { mode: themeMode, setMode: setThemeMode } = useThemeMode();
   const { profile, refresh } = useProfile();
-
-  const [age, setAge] = useState('');
-  const [heightCm, setHeightCm] = useState('');
-  const [sex, setSex] = useState<Sex | undefined>();
-  const [activityLevel, setActivityLevel] = useState<ActivityLevel | undefined>();
-  const [goalType, setGoalType] = useState<GoalType | undefined>();
-  const [rate, setRate] = useState(0);
-  const [weightKg, setWeightKg] = useState('');
-  const [loadingWeight, setLoadingWeight] = useState(true);
+  const { showToast } = useToast();
   const [latestGoal, setLatestGoal] = useState<Goal | null>(null);
-
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (!profile) return;
-    setAge(profile.age?.toString() ?? '');
-    setHeightCm(profile.height_cm?.toString() ?? '');
-    setSex(profile.sex ?? undefined);
-    setActivityLevel(profile.activity_level ?? undefined);
-    setGoalType(profile.goal_type ?? undefined);
-    setRate(profile.target_rate_kg_per_week ?? 0);
-  }, [profile]);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
-    fetchLatestWeight(user.id)
-      .then((w) => setWeightKg(w?.toString() ?? ''))
-      .finally(() => setLoadingWeight(false));
     fetchLatestGoal(user.id).then(setLatestGoal);
   }, [user]);
 
-  const bounds = goalType ? RATE_BOUNDS[goalType] : null;
+  const photoUrl = avatarUrl(profile?.avatar_path ?? null);
 
-  const onSave = async () => {
-    if (!user) return;
-    setSaving(true);
-    setError(null);
-    setSaved(false);
+  const onChangePhoto = async () => {
+    if (!user || uploading) return;
+    setUploading(true);
     try {
-      await updateProfile(user.id, {
-        age: age ? Number(age) : null,
-        height_cm: heightCm ? Number(heightCm) : null,
-        sex: sex ?? null,
-        activity_level: activityLevel ?? null,
-        goal_type: goalType ?? null,
-        target_rate_kg_per_week: goalType === 'maintenance' ? 0 : rate,
-      });
-      if (weightKg) {
-        await logWeight(user.id, Number(weightKg));
+      const result = await pickAndUploadAvatar(user.id);
+      if (result) {
+        await refresh();
+        showToast('Profile photo updated');
       }
-      await refresh();
-      setSaved(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save changes.');
+      showToast(e instanceof Error ? e.message : 'Failed to upload photo', 'error');
     } finally {
-      setSaving(false);
+      setUploading(false);
     }
   };
 
   return (
     <ScreenContainer>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.header}>
+          <Pressable style={styles.avatarWrap} onPress={onChangePhoto} accessibilityLabel="Change profile photo">
+            {photoUrl ? (
+              <Image source={{ uri: photoUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <UserRound size={34} color={t.colors.textTertiary} />
+              </View>
+            )}
+            <View style={styles.cameraBadge}>
+              <Camera size={13} color={t.colors.onAccent} />
+            </View>
+          </Pressable>
           <Text style={styles.email}>{user?.email}</Text>
+          {uploading ? <Text style={styles.uploading}>Uploading photo…</Text> : null}
+        </View>
 
-          {latestGoal ? (
-            <Card style={styles.targetCard} highlighted>
-              <Text style={styles.targetLabel}>Your target</Text>
-              <Text style={styles.targetCalories}>{latestGoal.calorie_target} kcal/day</Text>
-              <Text style={styles.targetMacros}>
-                {latestGoal.protein_g}g protein · {latestGoal.carbs_g}g carbs · {latestGoal.fat_g}g fat
-              </Text>
-              {latestGoal.reason ? <Text style={styles.targetReason}>{latestGoal.reason}</Text> : null}
-            </Card>
-          ) : null}
-
-          <Card style={styles.menuCard}>
-            <Pressable
-              style={styles.menuRow}
-              onPress={() => navigation.navigate('CalendarMain')}
-            >
-              <View style={styles.menuIconWrap}>
-                <Calendar size={18} color={t.colors.accentEmphasis} />
-              </View>
-              <Text style={styles.menuLabel}>Calendar</Text>
-              <ChevronRight size={18} color={t.colors.textTertiary} />
-            </Pressable>
-            <View style={styles.menuDivider} />
-            <Pressable
-              style={styles.menuRow}
-              onPress={() => navigation.navigate('AnalyticsMain')}
-            >
-              <View style={styles.menuIconWrap}>
-                <BarChart3 size={18} color={t.colors.accentEmphasis} />
-              </View>
-              <Text style={styles.menuLabel}>Analytics</Text>
-              <ChevronRight size={18} color={t.colors.textTertiary} />
-            </Pressable>
+        {latestGoal ? (
+          <Card style={styles.targetCard} highlighted>
+            <Text style={styles.targetLabel}>Your target</Text>
+            <Text style={styles.targetCalories}>{latestGoal.calorie_target} kcal/day</Text>
+            <Text style={styles.targetMacros}>
+              {latestGoal.protein_g}g protein · {latestGoal.carbs_g}g carbs · {latestGoal.fat_g}g fat
+            </Text>
           </Card>
+        ) : null}
 
-          <Text style={styles.section}>Appearance</Text>
-          <View style={styles.themeRow}>
-            {(['system', 'light', 'dark'] as const).map((m) => (
-              <Chip
-                key={m}
-                label={m === 'system' ? 'Auto' : m === 'light' ? 'Light' : 'Dark'}
-                selected={themeMode === m}
-                onPress={() => setThemeMode(m)}
-                style={styles.themeChip}
-              />
-            ))}
-          </View>
+        <Text style={styles.sectionTitle}>Activity</Text>
+        <Card style={styles.menuCard}>
+          <MenuRow icon={Calendar} label="Calendar" onPress={() => navigation.navigate('CalendarMain')} />
+          <MenuDivider />
+          <MenuRow icon={BarChart3} label="Analytics" onPress={() => navigation.navigate('AnalyticsMain')} />
+        </Card>
 
-          <Text style={styles.section}>Basics</Text>
-          <Text style={styles.label}>Sex</Text>
-          <OptionPicker options={SEX_OPTIONS} selected={sex} onSelect={setSex} />
-          <TextField label="Age" keyboardType="number-pad" value={age} onChangeText={setAge} />
-          <TextField label="Height (cm)" keyboardType="decimal-pad" value={heightCm} onChangeText={setHeightCm} />
-          <Text style={styles.label}>Current weight (kg)</Text>
-          {loadingWeight ? (
-            <ActivityIndicator color={t.colors.accentEmphasis} />
-          ) : (
-            <TextField keyboardType="decimal-pad" value={weightKg} onChangeText={setWeightKg} />
-          )}
-
-          <Text style={styles.section}>Activity level</Text>
-          <OptionPicker options={ACTIVITY_OPTIONS} selected={activityLevel} onSelect={setActivityLevel} />
-
-          <Text style={styles.section}>Goal</Text>
-          <OptionPicker
-            options={GOAL_OPTIONS}
-            selected={goalType}
-            onSelect={(v) => {
-              setGoalType(v);
-              setRate(RATE_BOUNDS[v].default);
-            }}
+        <Text style={styles.sectionTitle}>Settings</Text>
+        <Card style={styles.menuCard}>
+          <MenuRow
+            icon={UserCog}
+            label="Edit profile"
+            detail="Body stats, activity level, goal"
+            onPress={() => navigation.navigate('EditProfile')}
           />
-          {bounds && goalType !== 'maintenance' ? (
-            <Stepper value={rate} min={bounds.min} max={bounds.max} step={0.1} onChange={setRate} format={formatRate} />
-          ) : null}
+          <MenuDivider />
+          <MenuRow
+            icon={Settings2}
+            label="Preferences"
+            detail="Units, theme, notifications"
+            onPress={() => navigation.navigate('Preferences')}
+          />
+          <MenuDivider />
+          <MenuRow
+            icon={UserRound}
+            label="Account"
+            detail="Password, delete account"
+            onPress={() => navigation.navigate('Account')}
+          />
+          <MenuDivider />
+          <MenuRow icon={Database} label="Data" detail="Export your data" onPress={() => navigation.navigate('DataExport')} />
+          <MenuDivider />
+          <MenuRow icon={Info} label="About" onPress={() => navigation.navigate('About')} />
+        </Card>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {saved ? <Text style={styles.success}>Saved!</Text> : null}
-
-          <Button label="Save changes" onPress={onSave} loading={saving} style={styles.saveButton} />
-          <Button label="Log Out" onPress={signOut} variant="destructive" style={styles.logoutButton} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+        <Button label="Log Out" onPress={signOut} variant="destructive" style={styles.logout} />
+      </ScrollView>
     </ScreenContainer>
   );
 }
 
 function createStyles(t: Theme) {
   return StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flexGrow: 1, padding: t.spacing.xxl },
-  email: { ...t.typography.caption, color: t.colors.textSecondary, marginBottom: t.spacing.lg },
-  targetCard: { marginBottom: t.spacing.lg },
-  targetLabel: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase' },
-  targetCalories: { fontSize: 28, fontFamily: FONTS.extrabold, color: t.colors.accentEmphasis, marginTop: t.spacing.xs },
-  targetMacros: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.xs },
-  targetReason: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.sm, fontStyle: 'italic' },
-  menuCard: { padding: 0, marginBottom: t.spacing.lg, overflow: 'hidden' },
-  menuRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: t.spacing.md + 2, paddingHorizontal: t.spacing.lg, gap: t.spacing.md },
-  menuIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: t.radii.md,
-    backgroundColor: t.colors.accentMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuLabel: { ...t.typography.bodyBold, color: t.colors.textPrimary, flex: 1 },
-  menuDivider: { height: 1, backgroundColor: t.colors.border, marginLeft: t.spacing.lg + 34 + t.spacing.md },
-  themeRow: { flexDirection: 'row', gap: t.spacing.sm },
-  themeChip: { flex: 1, justifyContent: 'center' },
-  section: { ...t.typography.h3, color: t.colors.textPrimary, marginTop: t.spacing.xl, marginBottom: t.spacing.md },
-  label: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, marginTop: t.spacing.md, textTransform: 'uppercase' },
-  saveButton: { marginTop: t.spacing.xl },
-  logoutButton: { marginTop: t.spacing.md, marginBottom: 40 },
-  error: { color: t.colors.danger, marginTop: t.spacing.lg, textAlign: 'center', ...t.typography.caption },
-  success: { color: t.colors.success, marginTop: t.spacing.lg, textAlign: 'center', ...t.typography.caption },
-});
+    container: { padding: t.spacing.xl, paddingBottom: t.spacing.xxxl },
+    header: { alignItems: 'center', marginBottom: t.spacing.xl },
+    avatarWrap: { marginBottom: t.spacing.md },
+    avatar: { width: 88, height: 88, borderRadius: 44 },
+    avatarPlaceholder: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      backgroundColor: t.colors.surfaceElevated,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cameraBadge: {
+      position: 'absolute',
+      right: -2,
+      bottom: -2,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: t.colors.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: t.colors.background,
+    },
+    email: { ...t.typography.body, color: t.colors.textSecondary },
+    uploading: { ...t.typography.caption, color: t.colors.accentEmphasis, marginTop: t.spacing.xs },
+    targetCard: { marginBottom: t.spacing.xl },
+    targetLabel: { ...t.typography.label, color: t.colors.textSecondary },
+    targetCalories: {
+      fontSize: 28,
+      lineHeight: 34,
+      fontFamily: FONTS.extrabold,
+      color: t.colors.accentEmphasis,
+      marginTop: t.spacing.xs,
+    },
+    targetMacros: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.xs },
+    sectionTitle: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm },
+    menuCard: { padding: 0, marginBottom: t.spacing.xl, overflow: 'hidden' },
+    logout: { marginTop: t.spacing.sm },
+  });
 }

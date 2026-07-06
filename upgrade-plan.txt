@@ -1,0 +1,426 @@
+You are upgrading an existing, working production app called FitLoop
+(github.com/hulagerushikesh/FitLoop). It is NOT a fresh project — it has
+a real user, real Supabase data, 33 passing unit tests on the calorie
+engine, and deployed edge functions. Follow these rules for the entire
+session, across every phase:
+
+1. READ FIRST. Before writing any code in a module, read the existing
+   files in that module fully. Do not guess at existing function
+   signatures, table columns, or navigation structure — verify them.
+
+2. NEVER break what works. The calorie/macro engine, onboarding wizard,
+   AI meal logging (Gemini via analyze-meal edge function), and workout
+   session logging currently work end-to-end. Any refactor must preserve
+   existing behavior unless a phase explicitly says to change it. Run
+   `npm test` and `tsc --noEmit` after every meaningful change, not just
+   at the end of a phase.
+
+3. DATABASE CHANGES ARE ADDITIVE. schema.sql and
+   0002_workouts_nutrition_v2.sql have already been run by hand in the
+   Supabase SQL Editor (they are not tracked via `supabase db push`
+   migration history). For every phase that needs schema changes, write
+   a NEW file: 0003_<phase_name>.sql, 0004_<phase_name>.sql, etc. Never
+   edit the existing schema.sql or 0002 file. Every new SQL file must be
+   safe to re-run (use IF NOT EXISTS / OR REPLACE / DO $$ ... $$ guards).
+   Enable RLS and write policies for every new table — no exceptions.
+
+4. GIT HYGIENE. Create a new branch per phase (e.g., `phase-1-design-system`).
+   Commit in small, logical chunks with clear messages. Do not merge to
+   main without me confirming I've tested on-device.
+
+5. COST AWARENESS. Every Gemini API call costs money and has latency.
+   Any new AI feature must include: a loading state, a timeout, a
+   graceful fallback if the API fails, and — where reasonable — client-side
+   caching to avoid redundant calls.
+
+6. MOBILE FIRST, WEB IS SECONDARY. This is a React Native/Expo app.
+   Optimize for iOS/Android touch interactions first (thumb reach, tap
+   targets ≥44px, haptics). The web build should just not be broken —
+   don't over-invest in web-specific polish.
+
+7. AFTER EACH PHASE: give me a short changelog, list any new environment
+   variables/secrets I need to set, list any new SQL files I need to run
+   manually in the SQL Editor (with exact file names), and tell me
+   exactly what to test on my phone before we move to the next phase.
+
+Confirm you've understood these rules, then begin Phase 0.
+
+
+Phase 0: Audit & Plan (do this before touching code)
+
+Goal: Claude Code builds an accurate mental model of the current app before changing anything.
+
+1. Walk the full repo structure and list every screen, every Supabase
+   table (cross-reference schema.sql + 0002 migration), every edge
+   function, and every navigation route currently in the app.
+2. Run the existing test suite and `tsc --noEmit` to confirm the baseline
+   is green before any changes.
+3. Identify any TODOs, commented-out code, or obvious dead code left
+   from previous sessions.
+4. Produce a short written map of: screens → the tables/hooks they read
+   and write. This becomes our reference for the rest of the upgrade so
+   we don't duplicate logic.
+5. Do NOT write any feature code yet. Just report findings and wait for
+   confirmation to proceed to Phase 1.
+
+
+Phase 1: Design System & Visual Overhaul
+
+Goal: stop the app from looking like a prototype. This is the single highest-leverage phase — it's what makes everything after it feel professional even before new features land.
+
+1. Create a centralized design system: `theme/` folder with:
+   - colors.ts (semantic tokens: background, surface, surfaceElevated,
+     textPrimary, textSecondary, border, accent, success, warning,
+     danger — plus full light AND dark mode palettes)
+   - typography.ts (a type scale: display, h1, h2, h3, body, bodySmall,
+     caption, label — using a distinctive font pairing, not system
+     default. Suggest Inter or Manrope for body text and a slightly
+     heavier weight for numbers/stats since this is a data-dense app)
+   - spacing.ts (4/8/12/16/24/32/48 scale — no magic numbers in
+     component styles after this)
+   - radii.ts and shadows.ts (consistent corner radius and elevation
+     across cards/buttons/modals)
+
+2. Build a shared component library in `components/ui/`:
+   - Button (primary/secondary/ghost/destructive variants, loading state,
+     icon support, haptic feedback on press via expo-haptics)
+   - Card, StatCard (for dashboard numbers), ProgressRing (circular,
+     for macro/calorie targets — replace any flat progress bars with
+     these where it's the "hero" metric on a screen)
+   - Input, NumberInput (with +/- steppers for reps/weight — much faster
+     than typing on a phone mid-set)
+   - Badge, Chip (for muscle group tags, PR badges, streak flags)
+   - EmptyState (icon + message + CTA — every list screen needs one for
+     when there's no data yet, this is currently likely just blank)
+   - Skeleton loaders (shimmer placeholders) — replace any bare spinners
+     with content-shaped skeletons for perceived performance
+   - Toast/Snackbar for success/error feedback instead of Alert.alert
+     where appropriate
+
+3. Add a theme context + toggle: system/light/dark, persisted locally.
+   Migrate all existing screens to consume the theme instead of hardcoded
+   colors — grep the codebase for hex codes and inline color strings and
+   replace them.
+
+4. Install lucide-react-native for iconography if not already present.
+   Replace any emoji-as-icon or missing-icon spots across the app.
+
+5. Add subtle motion: screen transitions, card press states (scale down
+   slightly on press), number count-up animations for stats (e.g., when
+   the calorie target loads, animate from 0 to the value). Use
+   react-native-reanimated (likely already a transitive dependency of
+   navigation) — keep animations under 250ms, nothing gratuitous.
+
+6. Fix any remaining RN-Web overflow/sizing issues you find while doing
+   this pass, following the same phone-width-frame pattern already
+   established in the root layout fix.
+
+Acceptance: every existing screen still works exactly as before
+functionally, but now uses the shared design system with zero
+hardcoded colors/spacing left in component files. Show me before/after
+for the Home, Workouts, and Nutrition screens specifically.
+
+
+
+Phase 2: Onboarding, Auth & Profile Polish
+
+
+1. Add a visible progress indicator (step 1/3, 2/3, 3/3) to the
+   onboarding wizard with the new design system's styling.
+2. Add unit preference (kg/lb, cm/in) as a onboarding step and a Profile
+   setting — this affects every weight input in the Workouts module and
+   every body-metric input, so thread a `useUnits()` hook through instead
+   of hardcoding kg everywhere.
+3. Add password reset flow (Supabase Auth supports this natively —
+   forgot password → email link → new password screen).
+4. Add profile photo upload (Supabase Storage bucket, with RLS so users
+   can only write to their own folder, image picker via expo-image-picker,
+   compress before upload).
+5. Expand the Profile screen into a proper Settings area:
+   - Account (email, password, delete account with confirmation)
+   - Preferences (units, theme, notification toggles — build the toggles
+     now even before Phase 8 wires up actual notifications)
+   - Data (export my data as JSON/CSV, see Phase 6)
+   - About (app version, links to privacy policy/terms — stub pages ok)
+
+Acceptance: I can sign up, complete onboarding with unit preference,
+upload a profile photo, and find my way to every settings sub-page.
+
+
+Phase 3 — Workout Module: Speed, Depth, and Intelligence
+
+This is the phase where we close the gap with Strong (logging speed) and Fitbod (adaptive intelligence).
+1. LOGGING SPEED (Strong-style):
+   - Auto-populate each set's weight/reps with the value from the user's
+     last session of that exact exercise, shown as a subtle placeholder/
+     pre-fill they can tap to accept or edit.
+   - Replace text-input-only set entry with NumberInput steppers (+/-)
+     sized for one-thumb use, plus direct tap-to-type for exact values.
+   - Add a "repeat last set" quick-add button for supersets/dropsets of
+     the same movement.
+   - Add a plate calculator (given total weight + bar weight, show which
+     plates go on each side) as a small utility accessible from the set
+     logging screen.
+   - Add a 1RM estimate (Epley formula: weight × (1 + reps/30)) displayed
+     live as the user logs a heavy set, and a dedicated "PR" celebratory
+     toast/animation when a logged set beats their historical best for
+     that exercise.
+
+2. SUPERSETS & ADVANCED SET TYPES:
+   - Extend workout_exercises / workout_logs schema (new migration file)
+     to support: superset grouping (link 2+ exercises performed back to
+     back), drop sets (multiple weight/rep pairs within one logical set),
+     and to-failure flag (AMRAP sets).
+   - Update the routine builder UI to let users group exercises into a
+     superset when building a routine.
+
+3. MUSCLE RECOVERY MODEL (Fitbod-style, this is the AI differentiator):
+   - New table: muscle_group_fatigue (user_id, muscle_group, last_trained_at,
+     estimated_recovery_hours, rolling_volume_7d).
+   - After each workout session is completed, an edge function or client-
+     side job updates estimated recovery per muscle group hit, based on
+     total volume (sets × reps × weight) and a recovery-hours heuristic
+     per muscle group (e.g., large muscle groups like legs/back: ~72h,
+     smaller groups like arms/core: ~48h — make these configurable
+     constants, not magic numbers).
+   - Surface this on the Home screen: a simple recovery indicator per
+     muscle group (fresh / recovering / fatigued) using color-coded chips,
+     and use it to suggest which of the user's existing routines is the
+     best fit for "today" (don't build a full AI generator yet — start
+     by ranking the user's own saved routines by how well they match
+     currently-recovered muscle groups).
+
+4. VOICE LOGGING (stretch goal, Vora-style):
+   - Add a mic button on the set-logging screen using expo-speech (or a
+     lightweight on-device speech-to-text lib compatible with Expo) that
+     parses simple patterns like "135 for 8" or "60 kilos 10 reps" into
+     weight+reps and pre-fills the input for confirmation (always require
+     a tap to confirm, never auto-submit from voice alone — avoid mis-
+     logs from parsing errors).
+
+5. EXERCISE LIBRARY DEPTH:
+   - Add short looping form-demo GIFs or embedded YouTube thumbnails
+     (you already have YouTube deep-links — upgrade to show a thumbnail
+     preview inline using the video ID, still deep-linking out to watch,
+     no extra video hosting needed).
+   - Add a custom exercise creation flow (name, muscle group, category,
+     optional photo via Storage) so advanced users aren't limited to the
+     55 seeded exercises.
+   - Add exercise-level history: tapping any exercise from the library
+     shows a mini chart of weight/volume progression over time for that
+     specific movement (this doubles as a preview of Phase 6's analytics).
+
+Acceptance: logging a full workout is noticeably faster than before
+(fewer taps per set), superset routines can be built and logged, the
+Home screen shows a recovery-aware routine suggestion, and at least one
+exercise shows a historical progress mini-chart.
+
+Phase 4 — Nutrition Module: Depth and Friction Reduction
+1. FOOD DATABASE SEARCH: integrate Open Food Facts (free, no API key) or
+   USDA FoodData Central as a searchable food database for manual logging,
+   caching results in a local `food_items_cache` table so repeat searches
+   are fast and don't hammer the external API. This is the "deferred food
+   search" mentioned as pending — prioritize this early in the phase.
+
+2. BARCODE SCANNER: add expo-camera + a barcode scanning library to look
+   up packaged foods instantly by barcode against the same food database,
+   pre-filling macros — this is one of the highest-friction-reduction
+   features in nutrition apps and currently missing entirely.
+
+3. MACRO VISUALIZATION: replace flat numbers with the ProgressRing
+   component from Phase 1 for calories, and stacked/segmented bars for
+   protein/carbs/fat, on both the Home screen and the food logging screen,
+   updating live as entries are added.
+
+4. WATER INTAKE TRACKER: simple daily counter (quick-add buttons for
+   common volumes), stored per day, shown on Home and factored into the
+   daily_summary view (new migration to extend the view or add a
+   water_logs table joined in).
+
+5. MEAL BUILDER: let users combine multiple food items into a custom
+   "meal" (e.g., "my usual breakfast") that sums macros automatically,
+   separate from the existing saved/reusable single meals — this is for
+   composite meals, not just re-logging one item.
+
+6. SMART REMAINING-MACROS SUGGESTIONS: on the food logging screen, show
+   "You have ~420 kcal / 35g protein left today" contextually, and
+   optionally suggest 2-3 of the user's saved/frequent foods that fit
+   within the remaining budget.
+
+7. AI PHOTO LOG GALLERY: since AI photo logging already works, keep the
+   uploaded photos (Supabase Storage) linked to their food_log row and
+   add a simple visual gallery/history view of past AI-logged meals with
+   thumbnails — this is a nice, cheap-to-build differentiator most
+   competitor apps don't do well.
+
+Acceptance: I can search a food database and log an item without typing
+macros by hand, scan a barcode, log water, build a composite meal, and
+see a photo gallery of past AI-logged meals.
+
+Phase 5 — Analytics & Progress Dashboard
+1. Build a dedicated Analytics tab/section (currently folded into
+   Profile — decide with me whether it stays there or gets promoted to
+   its own tab once it has enough content to justify it).
+
+2. STRENGTH PROGRESS: per-exercise line chart of estimated 1RM over time
+   (using the Epley formula from Phase 3), selectable by exercise, with
+   a simple trend indicator (up/flat/down over the last 4 weeks).
+
+3. VOLUME ANALYTICS: weekly training volume (sets × reps × weight) per
+   muscle group, as a stacked bar chart — this answers "am I training
+   legs enough relative to upper body" at a glance.
+
+4. BODY METRICS: extend beyond just weight — add optional body
+   measurements (waist, chest, arms, etc.) and progress photos (Storage,
+   private per user) with a before/after slider view. New table:
+   body_measurements (user_id, date, metric_type, value) and
+   progress_photos (user_id, date, storage_path).
+
+5. STREAKS & LIGHT GAMIFICATION: logging streak (already exists per the
+   summary — make it visually prominent, e.g., a flame icon with count),
+   plus milestone badges (first workout, 10 workouts, first PR, 30-day
+   streak, etc.) stored in a simple `achievements` table and surfaced as
+   a toast + a badge shelf on the profile.
+
+6. WEEKLY SUMMARY: an auto-generated weekly recap (could reuse/extend
+   the existing weekly-recalibration edge function's output) — avg
+   calories, macro adherence %, workouts completed vs. planned, and the
+   week-over-week strength/volume trend, presented as a shareable-looking
+   card (even if sharing isn't wired up yet, make it look like it could be).
+
+7. DATA EXPORT: CSV export of workout logs and food logs from the
+   Settings screen built in Phase 2, generated client-side or via a
+   small edge function, offered as a share-sheet action.
+
+Acceptance: I can see my strength trend on at least 3 lifts, my weekly
+training volume split by muscle group, log a body measurement and a
+progress photo, and see my current streak and any earned badges.
+
+
+Phase 6 — Calendar & Home Dashboard Redesign
+1. HOME SCREEN: redesign as a genuine "today" dashboard — greeting,
+   today's suggested/planned workout (using the Phase 3 recovery model),
+   remaining calories/macros (ProgressRing), current streak, and quick-
+   action buttons that deep-link directly into logging (already fixed
+   per the summary — keep that fix, just restyle).
+
+2. CALENDAR HEATMAP: add a GitHub-contribution-style heatmap (color
+   intensity by workout volume or calorie adherence) as an alternative
+   or addition to the existing monthly grid — this is a very cheap way
+   to make consistency visually satisfying.
+
+3. Tapping any day in the existing calendar should deep-link into that
+   day's detail (already shows calories/protein/workout names per the
+   summary — just make sure the tap target opens a clean day-detail
+   sheet/modal using the new design system rather than inline text).
+
+Acceptance: Home feels like a personalized dashboard, not a static
+screen, and the calendar has a satisfying "streak visualization" element.
+
+
+Phase 7 — Notifications & Re-engagement
+1. Set up expo-notifications for local (device-scheduled) notifications
+   first — no backend push infrastructure needed for these:
+   - Meal logging reminder (configurable time, e.g., if no food logged
+     by 8pm)
+   - Workout reminder based on the user's routine's day-of-week schedule
+   - Weekly recalibration ready notification (tie into the existing
+     weekly-recalibration edge function's schedule)
+   - Streak-at-risk warning (e.g., "log today to keep your 12-day streak")
+
+2. Wire the notification toggles built in Phase 2's Settings screen to
+   actually enable/disable each of these.
+
+3. (Optional, more involved) If you want true push notifications that
+   work even when the app is closed, that requires Expo push tokens
+   stored per-device and a scheduled edge function or external cron
+   hitting Supabase — flag this as a bigger lift and confirm with me
+   before building it, since it needs an Expo push token table and a
+   scheduling mechanism (e.g., pg_cron or a Supabase scheduled function).
+
+Acceptance: local notifications fire correctly for at least the meal
+reminder and workout reminder cases, and toggling them off in Settings
+actually cancels scheduled notifications.
+
+
+Phase 8 — Reliability, Offline Support & Performance
+1. Add proper error boundaries around each major screen so a crash in
+   one tab doesn't take down the whole app.
+
+2. Add retry-with-backoff for the Gemini edge function calls (analyze-meal)
+   — network hiccups shouldn't force the user to retake a photo/retype.
+
+3. Basic offline resilience: cache the day's already-loaded data (today's
+   food logs, current workout session) in AsyncStorage so a brief network
+   drop mid-workout doesn't lose in-progress set logging — queue writes
+   and flush when connectivity returns. Full offline-first sync is a
+   bigger architecture change; start with this narrower "don't lose data
+   mid-session" version and confirm with me before going further.
+
+4. Add a lightweight in-app rate limit / friendly message for the AI
+   photo/text meal logging if a user hits it excessively in a short
+   window, to protect your Gemini API costs.
+
+5. Audit every list screen (food log history, exercise library, workout
+   history) for performance with FlatList/FlashList and proper
+   windowing rather than rendering everything at once.
+
+Acceptance: killing wifi mid-workout-session doesn't lose logged sets,
+a failed AI meal analysis retries automatically once before showing an
+error, and long lists scroll smoothly.
+
+
+
+Phase 9 — Security & Backend Hardening
+1. Full RLS audit: for every table (old and new), confirm a policy
+   exists restricting access to auth.uid() = user_id (or the equivalent
+   join-based check used for workout_exercises). Write this as a
+   verification SQL script I can run in the SQL Editor that lists any
+   table with RLS disabled or without policies.
+
+2. Confirm the Gemini API key is only ever read server-side in the edge
+   function via Deno.env.get — grep the client codebase to make sure it
+   was never accidentally bundled into app/.env or committed to git
+   history. If it was ever committed, tell me explicitly so I can rotate
+   it at aistudio.google.com/apikey.
+
+3. Validate all edge function inputs (Zod or manual checks) — reject
+   malformed requests before they reach Gemini or the database.
+
+4. Confirm the publishable key (not a secret key) is what's used in
+   app/.env, and that no secret key is ever referenced client-side.
+
+Acceptance: you hand me a short written confirmation of RLS coverage
+across every table, and confirmation that no secret/API keys exist in
+client-bundled code.
+
+
+Phase 10 — Testing Expansion
+1. Expand the existing 33 unit tests to also cover: the new muscle
+   recovery calculation, the 1RM estimation, and any new pure functions
+   introduced in Phases 3-6.
+
+2. Add integration-style tests for at least the core flows using
+   whatever RN testing approach fits (React Native Testing Library) —
+   at minimum: onboarding wizard completes and produces a sane calorie
+   target, logging a workout set updates the session correctly.
+
+3. Re-run `tsc --noEmit` and the full test suite at the end of this
+   phase and report the final counts (tests passing, any type errors).
+
+Acceptance: test count has grown meaningfully beyond 33, all green,
+zero TypeScript errors.
+
+
+Phase 11 — Release Polish
+
+1. Proper app icon and splash screen (if still using Expo defaults).
+2. Review EAS build configuration for a production build profile.
+3. Write a minimal but real privacy policy and terms page (even a
+   straightforward templated one) since the app collects health data —
+   this matters for App Store/Play Store review, not just legal cover.
+4. Final pass: open every screen on both a small phone and a larger
+   phone simulator to check nothing clips or overflows.
+
+Acceptance: the app is in a state you'd be comfortable putting in front
+of a stranger or a recruiter without narrating around rough edges.

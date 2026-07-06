@@ -57,6 +57,7 @@ export default function GoalStep(_props: Props) {
         goal_type: draft.goal_type!,
         target_rate_kg_per_week: draft.target_rate_kg_per_week!,
         weight_kg: draft.weight_kg!,
+        unit_system: draft.unit_system,
       });
 
       const targets = computeInitialTargets({

@@ -24,6 +24,8 @@ export type ExerciseCategory = 'compound' | 'isolation' | 'cardio';
 export type SplitType = 'push' | 'pull' | 'legs' | 'upper' | 'lower' | 'full_body' | 'custom';
 export type FoodLogSource = 'manual' | 'food_item' | 'ai_photo' | 'ai_text';
 
+export type UnitSystem = 'metric' | 'imperial';
+
 export interface Profile {
   id: string;
   email: string | null;
@@ -35,6 +37,8 @@ export interface Profile {
   goal_type: GoalType | null;
   target_rate_kg_per_week: number | null;
   onboarding_completed: boolean;
+  unit_system: UnitSystem;
+  avatar_path: string | null;
   created_at: string;
   updated_at: string;
 }

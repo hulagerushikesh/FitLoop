@@ -6,6 +6,7 @@ import { useProfile } from '../hooks/useProfile';
 import AuthNavigator from './AuthNavigator';
 import OnboardingNavigator from './OnboardingNavigator';
 import MainTabNavigator from './MainTabNavigator';
+import NewPasswordScreen from '../screens/auth/NewPasswordScreen';
 import { Button } from '../components/ui';
 import { Theme, useTheme, useThemedStyles } from '../theme';
 import { buildNavigationTheme } from '../theme/navigationTheme';
@@ -13,8 +14,14 @@ import { buildNavigationTheme } from '../theme/navigationTheme';
 export default function RootNavigator() {
   const theme = useTheme();
   const styles = useThemedStyles(createStyles);
-  const { session, loading: authLoading } = useAuth();
+  const { session, loading: authLoading, passwordRecovery } = useAuth();
   const { profile, loading: profileLoading, error, refresh } = useProfile();
+
+  // Recovery links sign the user in with a temporary session — force the
+  // new-password screen before anything else.
+  if (session && passwordRecovery) {
+    return <NewPasswordScreen />;
+  }
 
   if (authLoading || (session && profileLoading)) {
     return (

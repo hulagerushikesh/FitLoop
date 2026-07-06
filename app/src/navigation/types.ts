@@ -3,6 +3,7 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
+  ForgotPassword: undefined;
 };
 
 export type OnboardingStackParamList = {
@@ -33,6 +34,12 @@ export type ProfileStackParamList = {
   ProfileMain: undefined;
   CalendarMain: undefined;
   AnalyticsMain: undefined;
+  EditProfile: undefined;
+  Account: undefined;
+  ChangePassword: undefined;
+  Preferences: undefined;
+  DataExport: undefined;
+  About: undefined;
 };
 
 export type MainTabParamList = {

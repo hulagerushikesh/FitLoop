@@ -23,6 +23,7 @@ export interface OnboardingInput {
   goal_type: NonNullable<Profile['goal_type']>;
   target_rate_kg_per_week: number;
   weight_kg: number;
+  unit_system: Profile['unit_system'];
 }
 
 export async function completeOnboarding(

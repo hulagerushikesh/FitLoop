@@ -26,6 +26,7 @@ import {
   type RoutineExerciseRow,
 } from '../../services/workouts';
 import { fetchLatestWeight } from '../../services/profile';
+import { useUnits } from '../../hooks/useUnits';
 import { estimateSessionCalories } from '../../engine/calorieBurn';
 import { suggestNextSet, bestSet } from '../../engine/progressiveOverload';
 import RestTimer from '../../components/RestTimer';
@@ -56,6 +57,7 @@ function ExerciseLogCard({
 }) {
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
+  const units = useUnits();
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const [rpe, setRpe] = useState('');
@@ -69,7 +71,7 @@ function ExerciseLogCard({
 
   const onSubmit = () => {
     onLogSet({
-      weight_kg: weight ? Number(weight) : null,
+      weight_kg: weight ? units.parseWeight(Number(weight)) : null,
       reps: reps ? Number(reps) : null,
       rpe: rpe ? Number(rpe) : null,
     });
@@ -88,26 +90,26 @@ function ExerciseLogCard({
 
       {lastSets.length > 0 ? (
         <Text style={styles.lastTime}>
-          Last time: {lastSets.map((s) => `${s.weight_kg ?? '-'}kg x ${s.reps ?? '-'}`).join(', ')}
+          Last time: {lastSets.map((s) => `${s.weight_kg != null ? units.formatWeight(s.weight_kg) : '-'} x ${s.reps ?? '-'}`).join(', ')}
         </Text>
       ) : null}
 
       {suggestions.length > 0 ? (
         <View style={styles.suggestionRow}>
           <TrendingUp size={14} color={t.colors.accentEmphasis} />
-          <Text style={styles.suggestion}>{suggestions.map((s) => s.label).join(' or ')}</Text>
+          <Text style={styles.suggestion}>{suggestions.map((s) => `${units.formatWeight(s.weightKg)} x ${s.reps}`).join(' or ')}</Text>
         </View>
       ) : null}
 
       {loggedSets.map((s, i) => (
         <Text key={i} style={styles.loggedSet}>
-          Set {i + 1}: {s.weight_kg ?? '-'}kg x {s.reps ?? '-'} {s.rpe ? `@ RPE ${s.rpe}` : ''}
+          Set {i + 1}: {s.weight_kg != null ? units.formatWeight(s.weight_kg) : '-'} x {s.reps ?? '-'} {s.rpe ? `@ RPE ${s.rpe}` : ''}
         </Text>
       ))}
 
       <View style={styles.inputRow}>
         <View style={styles.setField}>
-          <Text style={styles.setFieldLabel}>Kg</Text>
+          <Text style={styles.setFieldLabel}>{units.weightUnit}</Text>
           <TextInput
             style={styles.setInput}
             placeholder="0"

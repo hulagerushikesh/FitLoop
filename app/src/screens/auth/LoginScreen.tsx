@@ -71,6 +71,12 @@ export default function LoginScreen({ navigation }: Props) {
             style={styles.submitButton}
           />
 
+          <Pressable onPress={() => navigation.navigate('ForgotPassword')} style={styles.linkRow}>
+            <Text style={styles.linkText}>
+              <Text style={styles.linkAccent}>Forgot password?</Text>
+            </Text>
+          </Pressable>
+
           <Pressable onPress={() => navigation.navigate('Signup')} style={styles.linkRow}>
             <Text style={styles.linkText}>
               Don't have an account? <Text style={styles.linkAccent}>Sign up</Text>
@@ -99,7 +105,7 @@ function createStyles(t: Theme) {
   title: { ...t.typography.display, color: t.colors.textPrimary },
   subtitle: { ...t.typography.body, color: t.colors.textSecondary, marginTop: t.spacing.xs },
   submitButton: { marginTop: t.spacing.sm },
-  linkRow: { marginTop: t.spacing.xxl, alignItems: 'center' },
+  linkRow: { marginTop: t.spacing.lg, alignItems: 'center', minHeight: 44, justifyContent: 'center' },
   linkText: { ...t.typography.body, color: t.colors.textSecondary },
   linkAccent: { color: t.colors.accentEmphasis, fontFamily: t.typography.bodyBold.fontFamily },
   error: { color: t.colors.danger, marginBottom: t.spacing.sm, ...t.typography.caption },
