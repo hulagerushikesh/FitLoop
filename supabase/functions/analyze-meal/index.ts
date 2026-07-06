@@ -19,6 +19,19 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Input validation limits — reject malformed/oversized requests before they
+// reach Gemini (protects both the API bill and against abuse).
+const MAX_DESCRIPTION_LEN = 500;
+const MAX_IMAGE_BASE64_LEN = 7_000_000; // ~5 MB decoded
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+
+function badRequest(message: string): Response {
+  return new Response(JSON.stringify({ error: message }), {
+    status: 400,
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+  });
+}
+
 interface MealEstimate {
   name: string;
   calories: number;
@@ -85,38 +98,49 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: CORS_HEADERS });
   }
 
+  // Malformed JSON is a client error, not a server crash.
+  let body: Record<string, unknown>;
   try {
-    const body = await req.json();
-    const { mode } = body;
+    body = await req.json();
+  } catch {
+    return badRequest('Request body must be valid JSON.');
+  }
 
+  const mode = body.mode;
+  if (mode !== 'text' && mode !== 'photo') {
+    return badRequest('mode must be "text" or "photo".');
+  }
+
+  try {
     let estimate: MealEstimate;
 
     if (mode === 'text') {
-      const description: string = body.description;
-      if (!description?.trim()) {
-        return new Response(JSON.stringify({ error: 'Missing description.' }), {
-          status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        });
+      const description = body.description;
+      if (typeof description !== 'string' || !description.trim()) {
+        return badRequest('description is required and must be a non-empty string.');
       }
-      estimate = await callGemini([{ text: `Estimate the nutrition for this meal: "${description}"` }]);
-    } else if (mode === 'photo') {
+      if (description.length > MAX_DESCRIPTION_LEN) {
+        return badRequest(`description must be ${MAX_DESCRIPTION_LEN} characters or fewer.`);
+      }
+      estimate = await callGemini([
+        { text: `Estimate the nutrition for this meal: "${description.trim()}"` },
+      ]);
+    } else {
       const { imageBase64, mimeType } = body;
-      if (!imageBase64) {
-        return new Response(JSON.stringify({ error: 'Missing imageBase64.' }), {
-          status: 400,
-          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-        });
+      if (typeof imageBase64 !== 'string' || imageBase64.length === 0) {
+        return badRequest('imageBase64 is required and must be a non-empty string.');
+      }
+      if (imageBase64.length > MAX_IMAGE_BASE64_LEN) {
+        return badRequest('Image is too large — please use a smaller photo.');
+      }
+      const resolvedMime = typeof mimeType === 'string' && mimeType ? mimeType : 'image/jpeg';
+      if (!ALLOWED_MIME_TYPES.includes(resolvedMime)) {
+        return badRequest(`Unsupported image type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}.`);
       }
       estimate = await callGemini([
         { text: 'Identify the food in this photo and estimate its nutrition.' },
-        { inlineData: { mimeType: mimeType ?? 'image/jpeg', data: imageBase64 } },
+        { inlineData: { mimeType: resolvedMime, data: imageBase64 } },
       ]);
-    } else {
-      return new Response(JSON.stringify({ error: 'mode must be "text" or "photo".' }), {
-        status: 400,
-        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-      });
     }
 
     return new Response(JSON.stringify({ estimate }), {
