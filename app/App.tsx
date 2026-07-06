@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
@@ -10,11 +10,19 @@ import {
   Inter_800ExtraBold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { AuthProvider } from './src/hooks/useAuth';
+import { AuthProvider, useAuth } from './src/hooks/useAuth';
 import { ProfileProvider } from './src/hooks/useProfile';
 import { ThemeProvider, useTheme } from './src/theme';
 import { ToastProvider } from './src/components/ui';
 import RootNavigator from './src/navigation/RootNavigator';
+import {
+  configureNotificationHandler,
+  readEnabledPrefs,
+  resyncAllNotifications,
+} from './src/services/notifications';
+
+// Surface foregrounded notifications; no-op on web. Safe to run at module load.
+configureNotificationHandler();
 
 export default function App() {
   // If font loading errors (e.g. offline first launch), render anyway —
@@ -34,6 +42,7 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <ProfileProvider>
+            <NotificationBootstrap />
             <WebAppFrame>
               <ToastProvider>
                 <RootNavigator />
@@ -50,6 +59,18 @@ export default function App() {
 function ThemedStatusBar() {
   const theme = useTheme();
   return <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />;
+}
+
+// Re-applies enabled reminder schedules once a user is signed in, so they
+// survive JS-bundle reinstalls and pick up any routine changes (workout
+// reminders are recomputed from current routines). No-op on web.
+function NotificationBootstrap() {
+  const { user } = useAuth();
+  useEffect(() => {
+    if (!user) return;
+    readEnabledPrefs().then((prefs) => resyncAllNotifications(user.id, prefs));
+  }, [user]);
+  return null;
 }
 
 // On native this is a no-op passthrough. On web, RN's flex:1 root would

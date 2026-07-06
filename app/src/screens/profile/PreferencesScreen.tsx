@@ -5,21 +5,19 @@ import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
 import { useUnits } from '../../hooks/useUnits';
 import { updateProfile } from '../../services/profile';
+import {
+  isNotificationsSupported,
+  notifPrefKey,
+  readEnabledPrefs,
+  syncNotification,
+} from '../../services/notifications';
 import { Card, Chip, useToast } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { Theme, useTheme, useThemeMode, useThemedStyles } from '../../theme';
+import type { NotifKey } from '../../engine/notificationSchedule';
 import type { UnitSystem } from '../../types/database';
 
-// AsyncStorage-backed toggles. Phase 7 wires these to real local
-// notifications; until then they just persist the user's intent.
-export const NOTIFICATION_PREF_KEYS = {
-  mealReminder: 'fitloop.notif.mealReminder',
-  workoutReminder: 'fitloop.notif.workoutReminder',
-  weeklyRecap: 'fitloop.notif.weeklyRecap',
-  streakWarning: 'fitloop.notif.streakWarning',
-} as const;
-
-const NOTIFICATION_ROWS: { key: keyof typeof NOTIFICATION_PREF_KEYS; label: string; detail: string }[] = [
+const NOTIFICATION_ROWS: { key: NotifKey; label: string; detail: string }[] = [
   { key: 'mealReminder', label: 'Meal reminders', detail: "Evening nudge if you haven't logged food" },
   { key: 'workoutReminder', label: 'Workout reminders', detail: 'On your scheduled training days' },
   { key: 'weeklyRecap', label: 'Weekly recap', detail: 'When your targets are recalibrated' },
@@ -38,20 +36,34 @@ export default function PreferencesScreen() {
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    (async () => {
-      const entries = await Promise.all(
-        NOTIFICATION_ROWS.map(async ({ key }) => {
-          const stored = await AsyncStorage.getItem(NOTIFICATION_PREF_KEYS[key]);
-          return [key, stored === 'true'] as const;
-        })
-      );
-      setNotifPrefs(Object.fromEntries(entries));
-    })();
+    readEnabledPrefs().then(setNotifPrefs);
   }, []);
 
-  const onToggleNotif = (key: keyof typeof NOTIFICATION_PREF_KEYS, value: boolean) => {
+  const onToggleNotif = async (key: NotifKey, value: boolean) => {
+    // Optimistic: flip the switch, persist intent, then reconcile with the OS.
     setNotifPrefs((prev) => ({ ...prev, [key]: value }));
-    AsyncStorage.setItem(NOTIFICATION_PREF_KEYS[key], String(value)).catch(() => {});
+    AsyncStorage.setItem(notifPrefKey(key), String(value)).catch(() => {});
+
+    if (!isNotificationsSupported) {
+      if (value) showToast('Reminders fire on the mobile app', 'info');
+      return;
+    }
+    if (!user) return;
+
+    try {
+      const count = await syncNotification(user.id, key, value);
+      if (value) {
+        showToast(
+          count > 0 ? 'Reminder scheduled' : "No training days set — add one to your routines",
+          count > 0 ? 'success' : 'info'
+        );
+      }
+    } catch (e) {
+      // Permission denied (or a scheduling failure): revert the toggle.
+      setNotifPrefs((prev) => ({ ...prev, [key]: false }));
+      AsyncStorage.setItem(notifPrefKey(key), 'false').catch(() => {});
+      showToast(e instanceof Error ? e.message : 'Could not schedule reminder', 'error');
+    }
   };
 
   const onSwitchUnits = async (next: UnitSystem) => {
@@ -121,8 +133,9 @@ export default function PreferencesScreen() {
           ))}
         </Card>
         <Text style={styles.notifFootnote}>
-          Reminders will start firing once notifications land in an upcoming update — your
-          choices here are saved.
+          {isNotificationsSupported
+            ? 'Reminders are scheduled on your device. Workout reminders follow your routine schedule.'
+            : 'Reminders fire on the FitLoop mobile app — your choices here are saved for when you sign in there.'}
         </Text>
       </ScrollView>
     </ScreenContainer>
