@@ -7,6 +7,7 @@ import HomeStackNavigator from './HomeStackNavigator';
 import NutritionStackNavigator from './NutritionStackNavigator';
 import WorkoutsStackNavigator from './WorkoutsStackNavigator';
 import ProfileStackNavigator from './ProfileStackNavigator';
+import ErrorBoundary from '../components/ErrorBoundary';
 import { FONTS, useTheme } from '../theme';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -17,6 +18,30 @@ const TAB_ICONS: Record<keyof MainTabParamList, LucideIcon> = {
   Workouts: Dumbbell,
   Profile: CircleUser,
 };
+
+// Each tab's stack is wrapped in its own error boundary so a crash inside one
+// tab shows a recoverable fallback there instead of white-screening the app.
+// Defined at module scope (not inline) so they aren't remounted every render.
+const HomeTab = () => (
+  <ErrorBoundary label="Home">
+    <HomeStackNavigator />
+  </ErrorBoundary>
+);
+const NutritionTab = () => (
+  <ErrorBoundary label="Nutrition">
+    <NutritionStackNavigator />
+  </ErrorBoundary>
+);
+const WorkoutsTab = () => (
+  <ErrorBoundary label="Workouts">
+    <WorkoutsStackNavigator />
+  </ErrorBoundary>
+);
+const ProfileTab = () => (
+  <ErrorBoundary label="Profile">
+    <ProfileStackNavigator />
+  </ErrorBoundary>
+);
 
 export default function MainTabNavigator() {
   const theme = useTheme();
@@ -40,10 +65,10 @@ export default function MainTabNavigator() {
         },
       })}
     >
-      <Tab.Screen name="Home" component={HomeStackNavigator} />
-      <Tab.Screen name="Nutrition" component={NutritionStackNavigator} />
-      <Tab.Screen name="Workouts" component={WorkoutsStackNavigator} />
-      <Tab.Screen name="Profile" component={ProfileStackNavigator} />
+      <Tab.Screen name="Home" component={HomeTab} />
+      <Tab.Screen name="Nutrition" component={NutritionTab} />
+      <Tab.Screen name="Workouts" component={WorkoutsTab} />
+      <Tab.Screen name="Profile" component={ProfileTab} />
     </Tab.Navigator>
   );
 }

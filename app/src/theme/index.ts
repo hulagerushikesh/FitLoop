@@ -6,5 +6,5 @@ export { FONTS, TYPOGRAPHY } from './typography';
 export { SPACING } from './spacing';
 export { RADII } from './radii';
 export type { ThemeColors } from './colors';
-export { ThemeProvider, useTheme, useThemeMode, useThemedStyles } from './ThemeContext';
+export { ThemeContext, ThemeProvider, useTheme, useThemeMode, useThemedStyles } from './ThemeContext';
 export type { ThemeMode } from './ThemeContext';

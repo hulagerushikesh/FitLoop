@@ -19,7 +19,7 @@ interface ThemeModeContextValue {
   setMode: (mode: ThemeMode) => void;
 }
 
-const ThemeContext = createContext<Theme>(darkTheme);
+export const ThemeContext = createContext<Theme>(darkTheme);
 const ThemeModeContext = createContext<ThemeModeContextValue>({
   mode: 'system',
   setMode: () => {},
