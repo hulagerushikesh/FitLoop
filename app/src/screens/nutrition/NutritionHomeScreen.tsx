@@ -2,13 +2,14 @@ import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { History, Sparkles, Trash2 } from "lucide-react-native";
+import { Camera, GlassWater, History, Minus, Plus, Sparkles, Trash2, UtensilsCrossed } from 'lucide-react-native';
 import type { NutritionStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchDailyLogs, deleteFoodLog } from '../../services/nutrition';
+import { addWater, fetchTodayWaterMl, removeLastWater } from '../../services/water';
 import { fetchLatestGoal } from '../../services/goals';
 import ScreenContainer from '../../components/ScreenContainer';
-import { Button, Card, SkeletonCard } from '../../components/ui';
+import { Button, Card, CountUp, ProgressRing, SkeletonCard } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
 import { MEAL_TYPE_OPTIONS } from '../../constants/nutritionOptions';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
@@ -29,16 +30,22 @@ export default function NutritionHomeScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [waterMl, setWaterMl] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!user) return;
     setLoading(true);
-    Promise.all([fetchDailyLogs(user.id), fetchLatestGoal(user.id)])
-      .then(([l, g]) => {
+    Promise.all([
+      fetchDailyLogs(user.id),
+      fetchLatestGoal(user.id),
+      fetchTodayWaterMl(user.id).catch(() => 0),
+    ])
+      .then(([l, g, w]) => {
         setLogs(l);
         setGoal(g);
+        setWaterMl(w);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load nutrition log'))
       .finally(() => setLoading(false));
@@ -89,6 +96,27 @@ export default function NutritionHomeScreen({ navigation }: Props) {
     }
   };
 
+  const onAddWater = async (ml: number) => {
+    if (!user) return;
+    setWaterMl((w) => w + ml); // optimistic
+    try {
+      await addWater(user.id, ml);
+    } catch (e) {
+      setWaterMl((w) => Math.max(0, w - ml));
+      setError(e instanceof Error ? e.message : 'Failed to log water');
+    }
+  };
+
+  const onUndoWater = async () => {
+    if (!user) return;
+    try {
+      await removeLastWater(user.id);
+      setWaterMl(await fetchTodayWaterMl(user.id));
+    } catch {
+      // leave as-is
+    }
+  };
+
   if (loading) {
     return (
       <ScreenContainer>
@@ -108,14 +136,61 @@ export default function NutritionHomeScreen({ navigation }: Props) {
 
         {goal ? (
           <Card style={styles.progressCard}>
-            <ProgressBar label="Calories" current={totals.calories} target={goal.calorie_target} unit=" kcal" color={t.colors.accentEmphasis} />
-            <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={t.colors.protein} />
-            <ProgressBar label="Carbs" current={totals.carbs_g} target={goal.carbs_g} unit="g" color={t.colors.carbs} />
-            <ProgressBar label="Fat" current={totals.fat_g} target={goal.fat_g} unit="g" color={t.colors.fat} />
+            <View style={styles.heroRow}>
+              <ProgressRing
+                progress={goal.calorie_target > 0 ? totals.calories / goal.calorie_target : 0}
+                size={120}
+                strokeWidth={11}
+              >
+                <CountUp value={Math.round(totals.calories)} style={styles.ringValue} />
+                <Text style={styles.ringLabel}>of {goal.calorie_target}</Text>
+              </ProgressRing>
+              <View style={styles.macroCol}>
+                <ProgressBar label="Protein" current={totals.protein_g} target={goal.protein_g} unit="g" color={t.colors.protein} />
+                <ProgressBar label="Carbs" current={totals.carbs_g} target={goal.carbs_g} unit="g" color={t.colors.carbs} />
+                <ProgressBar label="Fat" current={totals.fat_g} target={goal.fat_g} unit="g" color={t.colors.fat} />
+              </View>
+            </View>
           </Card>
         ) : (
           <Text style={styles.noGoal}>Finish onboarding to see targets here.</Text>
         )}
+
+        <Card style={styles.waterCard}>
+          <View style={styles.waterHeader}>
+            <View style={styles.waterTitleRow}>
+              <GlassWater size={18} color={t.colors.water} />
+              <Text style={styles.waterTitle}>Water</Text>
+            </View>
+            <Text style={styles.waterTotal}>
+              {(waterMl / 1000).toFixed(waterMl >= 1000 ? 1 : 2)} L
+            </Text>
+          </View>
+          <View style={styles.waterButtons}>
+            {[250, 500, 750].map((ml) => (
+              <Pressable key={ml} style={styles.waterAdd} onPress={() => onAddWater(ml)}>
+                <Plus size={14} color={t.colors.water} />
+                <Text style={styles.waterAddText}>{ml}ml</Text>
+              </Pressable>
+            ))}
+            {waterMl > 0 ? (
+              <Pressable style={styles.waterUndo} onPress={onUndoWater} accessibilityLabel="Undo last water">
+                <Minus size={16} color={t.colors.textSecondary} />
+              </Pressable>
+            ) : null}
+          </View>
+        </Card>
+
+        <View style={styles.toolsRow}>
+          <Pressable style={styles.toolButton} onPress={() => navigation.navigate('MealBuilder')}>
+            <UtensilsCrossed size={16} color={t.colors.accentEmphasis} />
+            <Text style={styles.toolText}>Meal builder</Text>
+          </Pressable>
+          <Pressable style={styles.toolButton} onPress={() => navigation.navigate('PhotoGallery')}>
+            <Camera size={16} color={t.colors.accentEmphasis} />
+            <Text style={styles.toolText}>Meal photos</Text>
+          </Pressable>
+        </View>
 
         {MEAL_TYPE_OPTIONS.map(({ value, label }) => (
           <View key={value} style={styles.section}>
@@ -161,7 +236,51 @@ function createStyles(t: Theme) {
   return StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center' },
   container: { padding: t.spacing.lg, paddingBottom: 110 },
-  progressCard: { marginBottom: t.spacing.sm },
+  progressCard: { marginBottom: t.spacing.md },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.lg },
+  macroCol: { flex: 1, minWidth: 0 },
+  ringValue: { ...t.typography.statSmall, color: t.colors.textPrimary },
+  ringLabel: { ...t.typography.caption, color: t.colors.textSecondary },
+  waterCard: { marginBottom: t.spacing.md },
+  waterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  waterTitleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
+  waterTitle: { ...t.typography.h3, color: t.colors.textPrimary },
+  waterTotal: { ...t.typography.statSmall, color: t.colors.water },
+  waterButtons: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.md, alignItems: 'center' },
+  waterAdd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surfaceElevated,
+    borderRadius: t.radii.full,
+    paddingHorizontal: t.spacing.md,
+    minHeight: 40,
+  },
+  waterAddText: { ...t.typography.bodySmall, fontFamily: FONTS.bold, color: t.colors.textPrimary },
+  waterUndo: {
+    width: 40,
+    height: 40,
+    borderRadius: t.radii.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 'auto',
+  },
+  toolsRow: { flexDirection: 'row', gap: t.spacing.sm, marginBottom: t.spacing.xs },
+  toolButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: t.spacing.xs,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radii.md,
+    minHeight: 44,
+  },
+  toolText: { ...t.typography.bodySmall, fontFamily: FONTS.bold, color: t.colors.textPrimary },
   noGoal: { color: t.colors.textSecondary, marginBottom: t.spacing.lg, ...t.typography.body },
   section: { marginTop: t.spacing.xl },
   sectionTitle: { ...t.typography.label, color: t.colors.textSecondary, marginBottom: t.spacing.sm, textTransform: 'uppercase' },

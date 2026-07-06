@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { DailySummary, FoodLog, FoodLogSource, Meal, MealType } from '../types/database';
+import type { DailySummary, FoodLog, FoodLogSource, Meal, MealItem, MealType } from '../types/database';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -43,6 +43,8 @@ export interface NewFoodLogInput {
   meal_type: MealType;
   source: FoodLogSource;
   meal_id?: string | null;
+  food_item_id?: string | null;
+  photo_path?: string | null;
 }
 
 export async function addFoodLog(userId: string, input: NewFoodLogInput): Promise<FoodLog> {
@@ -105,4 +107,92 @@ export async function logSavedMeal(userId: string, meal: Meal, mealType: MealTyp
     source: 'food_item',
     meal_id: meal.id,
   });
+}
+
+// ============================================================================
+// Composite meals (meal builder): a saved meal made of multiple items whose
+// macros sum automatically. meals.* keeps the totals; meal_items the parts.
+// ============================================================================
+
+export interface NewMealItemInput {
+  food_item_id?: string | null;
+  name: string;
+  servings: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+}
+
+export async function createCompositeMeal(
+  userId: string,
+  name: string,
+  items: NewMealItemInput[]
+): Promise<Meal> {
+  const totals = items.reduce(
+    (acc, i) => ({
+      calories: acc.calories + i.calories * i.servings,
+      protein_g: acc.protein_g + i.protein_g * i.servings,
+      carbs_g: acc.carbs_g + i.carbs_g * i.servings,
+      fat_g: acc.fat_g + i.fat_g * i.servings,
+    }),
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+  );
+
+  const meal = await saveMeal(userId, {
+    name,
+    calories: Math.round(totals.calories),
+    protein_g: Math.round(totals.protein_g * 10) / 10,
+    carbs_g: Math.round(totals.carbs_g * 10) / 10,
+    fat_g: Math.round(totals.fat_g * 10) / 10,
+  });
+
+  if (items.length > 0) {
+    const { error } = await supabase
+      .from('meal_items')
+      .insert(items.map((i) => ({ ...i, meal_id: meal.id })));
+    if (error) throw error;
+  }
+  return meal;
+}
+
+export async function fetchMealItems(mealId: string): Promise<MealItem[]> {
+  const { data, error } = await supabase
+    .from('meal_items')
+    .select('*')
+    .eq('meal_id', mealId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as MealItem[];
+}
+
+/** AI-photo-logged entries that kept their photo, newest first (gallery). */
+export async function fetchPhotoLogs(userId: string, limit = 60): Promise<FoodLog[]> {
+  const { data, error } = await supabase
+    .from('food_logs')
+    .select('*')
+    .eq('user_id', userId)
+    .not('photo_path', 'is', null)
+    .order('logged_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as FoodLog[];
+}
+
+/** Frequent + saved foods that fit within the remaining calorie budget. */
+export async function suggestFoodsWithinBudget(
+  userId: string,
+  remainingCalories: number,
+  limit = 3
+): Promise<Meal[]> {
+  if (remainingCalories <= 0) return [];
+  const { data, error } = await supabase
+    .from('meals')
+    .select('*')
+    .eq('user_id', userId)
+    .lte('calories', remainingCalories)
+    .order('calories', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as Meal[];
 }

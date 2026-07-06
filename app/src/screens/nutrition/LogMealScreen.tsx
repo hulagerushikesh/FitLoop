@@ -12,14 +12,18 @@ import {
   View,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Bookmark, Camera, Check, MessageCircleMore, SquarePen, Trash2 } from 'lucide-react-native';
+import { Bookmark, Camera, Check, MessageCircleMore, ScanBarcode, Search, Sparkles, SquarePen, Trash2 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { NutritionStackParamList } from '../../navigation/types';
+import type { LogMealPrefill, NutritionStackParamList } from '../../navigation/types';
 import { confirm } from '../../utils/confirm';
 import { useAuth } from '../../hooks/useAuth';
 import { addFoodLog, deleteMeal, fetchMeals, logSavedMeal, saveMeal } from '../../services/nutrition';
 import { analyzeMealText, analyzeMealPhoto } from '../../services/aiMeal';
+import { searchFoods } from '../../services/foodSearch';
+import { suggestFoodsWithinBudget, fetchDailyLogs } from '../../services/nutrition';
+import { fetchLatestGoal } from '../../services/goals';
+import { supabase } from '../../services/supabase';
 import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
 import { Button } from '../../components/ui';
@@ -29,9 +33,10 @@ import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLogSource, Meal, MealType } from '../../types/database';
 
 type Props = NativeStackScreenProps<NutritionStackParamList, 'LogMeal'>;
-type Mode = 'manual' | 'text' | 'photo' | 'saved';
+type Mode = 'search' | 'manual' | 'text' | 'photo' | 'saved';
 
 const MODES: { value: Mode; label: string; icon: LucideIcon }[] = [
+  { value: 'search', label: 'Search', icon: Search },
   { value: 'manual', label: 'Manual', icon: SquarePen },
   { value: 'text', label: 'Describe', icon: MessageCircleMore },
   { value: 'photo', label: 'Photo', icon: Camera },
@@ -63,6 +68,76 @@ export default function LogMealScreen({ navigation, route }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [photoBase64, setPhotoBase64] = useState<string | null>(null);
+  const [photoMime, setPhotoMime] = useState<string>('image/jpeg');
+  const [foodItemId, setFoodItemId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<import('../../types/database').FoodItem[]>([]);
+  const [searchingFoods, setSearchingFoods] = useState(false);
+  const searchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [remaining, setRemaining] = useState<{ kcal: number; protein: number } | null>(null);
+  const [suggestions, setSuggestions] = useState<Meal[]>([]);
+
+  // Remaining budget for today ("~420 kcal / 35g protein left") + saved
+  // meals that fit inside it.
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([fetchLatestGoal(user.id), fetchDailyLogs(user.id)])
+      .then(([goal, logs]) => {
+        if (!goal) return;
+        const eaten = logs.reduce(
+          (acc, l) => ({ kcal: acc.kcal + l.calories, protein: acc.protein + l.protein_g }),
+          { kcal: 0, protein: 0 }
+        );
+        const rem = {
+          kcal: Math.max(0, Math.round(goal.calorie_target - eaten.kcal)),
+          protein: Math.max(0, Math.round(goal.protein_g - eaten.protein)),
+        };
+        setRemaining(rem);
+        return suggestFoodsWithinBudget(user.id, rem.kcal).then(setSuggestions);
+      })
+      .catch(() => {});
+  }, [user]);
+
+  // Barcode scanner / other screens hand us a prefill.
+  useEffect(() => {
+    const prefill = route.params?.prefill;
+    if (!prefill) return;
+    applyPrefill(prefill);
+    navigation.setParams({ prefill: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.prefill]);
+
+  const applyPrefill = (p: LogMealPrefill) => {
+    setName(p.name);
+    setCalories(String(p.calories));
+    setProtein(String(p.protein_g));
+    setCarbs(String(p.carbs_g));
+    setFat(String(p.fat_g));
+    setFoodItemId(p.food_item_id ?? null);
+    setPendingSource(p.food_item_id ? 'food_item' : 'manual');
+    setMode('manual');
+  };
+
+  const onSearchChange = (text: string) => {
+    setSearchQuery(text);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (text.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      setSearchingFoods(true);
+      try {
+        setSearchResults(await searchFoods(text));
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchingFoods(false);
+      }
+    }, 350);
+  };
+
   const hasEstimate = name.trim().length > 0;
 
   useEffect(() => {
@@ -82,6 +157,8 @@ export default function LogMealScreen({ navigation, route }: Props) {
     setFat('');
     setPendingSource('manual');
     setPhotoUri(null);
+    setPhotoBase64(null);
+    setFoodItemId(null);
     setDescription('');
   };
 
@@ -127,6 +204,8 @@ export default function LogMealScreen({ navigation, route }: Props) {
 
     const asset = result.assets[0];
     setPhotoUri(asset.uri);
+    setPhotoBase64(asset.base64 ?? null);
+    setPhotoMime(asset.mimeType ?? 'image/jpeg');
     setAnalyzing(true);
     setError(null);
     try {
@@ -149,6 +228,24 @@ export default function LogMealScreen({ navigation, route }: Props) {
     setSaving(true);
     setError(null);
     try {
+      // Keep the analyzed photo for the gallery — best-effort, never blocks
+      // the log itself.
+      let photoPath: string | null = null;
+      if (pendingSource === 'ai_photo' && photoBase64) {
+        try {
+          const path = `${user.id}/meal@${Date.now()}.jpg`;
+          const binary = atob(photoBase64);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const { error: uploadError } = await supabase.storage
+            .from('meal-photos')
+            .upload(path, bytes, { contentType: photoMime, upsert: true });
+          if (!uploadError) photoPath = path;
+        } catch {
+          // ignore — log the meal without the photo
+        }
+      }
+
       const input = {
         name: name.trim(),
         servings: 1,
@@ -158,6 +255,8 @@ export default function LogMealScreen({ navigation, route }: Props) {
         fat_g: Number(fat) || 0,
         meal_type: mealType,
         source: pendingSource,
+        food_item_id: foodItemId,
+        photo_path: photoPath,
       };
       await addFoodLog(user.id, input);
       if (saveAsMeal) {
@@ -218,8 +317,99 @@ export default function LogMealScreen({ navigation, route }: Props) {
             ))}
           </View>
 
+          {remaining ? (
+            <View style={styles.budgetBanner}>
+              <Sparkles size={14} color={t.colors.accentEmphasis} />
+              <Text style={styles.budgetText}>
+                ~{remaining.kcal} kcal · {remaining.protein}g protein left today
+              </Text>
+            </View>
+          ) : null}
+
+          {remaining && suggestions.length > 0 && mode !== 'saved' ? (
+            <View style={styles.suggestionRow}>
+              {suggestions.map((meal) => (
+                <Pressable
+                  key={meal.id}
+                  style={styles.suggestionChip}
+                  onPress={() =>
+                    applyPrefill({
+                      name: meal.name,
+                      calories: meal.calories,
+                      protein_g: meal.protein_g,
+                      carbs_g: meal.carbs_g,
+                      fat_g: meal.fat_g,
+                    })
+                  }
+                >
+                  <Text style={styles.suggestionChipText} numberOfLines={1}>
+                    {meal.name} · {meal.calories} kcal
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
           <Text style={styles.label}>Meal</Text>
           <OptionPicker options={MEAL_TYPE_OPTIONS} selected={mealType} onSelect={setMealType} />
+
+          {mode === 'search' ? (
+            <>
+              <Text style={styles.label}>Find a food</Text>
+              <View style={styles.searchRow}>
+                <View style={styles.searchWrap}>
+                  <Search size={18} color={t.colors.textTertiary} style={styles.searchIcon} />
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search foods (Open Food Facts)"
+                    placeholderTextColor={t.colors.textTertiary}
+                    value={searchQuery}
+                    onChangeText={onSearchChange}
+                  />
+                </View>
+                <Pressable
+                  style={styles.scanButton}
+                  onPress={() => navigation.navigate('BarcodeScanner')}
+                  accessibilityLabel="Scan barcode"
+                >
+                  <ScanBarcode size={20} color={t.colors.onAccent} />
+                </Pressable>
+              </View>
+              {searchingFoods ? (
+                <ActivityIndicator color={t.colors.accentEmphasis} style={{ marginTop: t.spacing.md }} />
+              ) : null}
+              {searchResults.map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={styles.searchResultRow}
+                  onPress={() =>
+                    applyPrefill({
+                      name: item.brand ? `${item.name} (${item.brand})` : item.name,
+                      calories: item.calories,
+                      protein_g: item.protein_g,
+                      carbs_g: item.carbs_g,
+                      fat_g: item.fat_g,
+                      food_item_id: item.created_at ? item.id : null,
+                    })
+                  }
+                >
+                  <View style={styles.searchResultInfo}>
+                    <Text style={styles.searchResultName} numberOfLines={1}>
+                      {item.name}
+                      {item.brand ? ` · ${item.brand}` : ''}
+                    </Text>
+                    <Text style={styles.searchResultMacros}>
+                      {item.calories} kcal · {item.protein_g}p / {item.carbs_g}c / {item.fat_g}f per {item.serving_size}
+                      {item.serving_unit}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+              {searchQuery.trim().length >= 2 && !searchingFoods && searchResults.length === 0 ? (
+                <Text style={styles.searchEmpty}>No matches — try the Describe tab and let AI estimate it.</Text>
+              ) : null}
+            </>
+          ) : null}
 
           {mode === 'text' ? (
             <>
@@ -355,6 +545,59 @@ function createStyles(t: Theme) {
   return StyleSheet.create({
   flex: { flex: 1 },
   container: { padding: t.spacing.xxl, paddingBottom: 60 },
+  budgetBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.xs,
+    backgroundColor: t.colors.accentMuted,
+    borderRadius: t.radii.md,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    marginBottom: t.spacing.md,
+  },
+  budgetText: { ...t.typography.bodySmall, fontFamily: FONTS.bold, color: t.colors.textPrimary },
+  suggestionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm, marginBottom: t.spacing.md },
+  suggestionChip: {
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radii.full,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    maxWidth: '100%',
+  },
+  suggestionChipText: { ...t.typography.caption, color: t.colors.textPrimary },
+  searchRow: { flexDirection: 'row', gap: t.spacing.sm, alignItems: 'center' },
+  searchWrap: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: t.colors.surface,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    borderRadius: t.radii.md,
+    paddingHorizontal: t.spacing.lg,
+  },
+  searchIcon: { marginRight: t.spacing.sm },
+  searchInput: { flex: 1, paddingVertical: t.spacing.md, minHeight: 48, ...t.typography.body, color: t.colors.textPrimary },
+  scanButton: {
+    width: 48,
+    height: 48,
+    borderRadius: t.radii.md,
+    backgroundColor: t.colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchResultRow: {
+    paddingVertical: t.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: t.colors.border,
+  },
+  searchResultInfo: { minWidth: 0 },
+  searchResultName: { ...t.typography.bodyBold, color: t.colors.textPrimary },
+  searchResultMacros: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
+  searchEmpty: { ...t.typography.caption, color: t.colors.textTertiary, marginTop: t.spacing.md },
   modeRow: { flexDirection: 'row', backgroundColor: t.colors.surface, borderRadius: t.radii.md, padding: 4, marginBottom: t.spacing.xl },
   modeButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: t.spacing.sm, borderRadius: t.radii.sm },
   modeButtonActive: { backgroundColor: t.colors.accent },

@@ -155,6 +155,27 @@ export interface FoodItem {
   created_at: string;
 }
 
+export interface WaterLog {
+  id: string;
+  user_id: string;
+  volume_ml: number;
+  logged_at: string;
+  logged_date: string;
+}
+
+export interface MealItem {
+  id: string;
+  meal_id: string;
+  food_item_id: string | null;
+  name: string;
+  servings: number;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  created_at: string;
+}
+
 export interface FoodLog {
   id: string;
   user_id: string;
@@ -169,7 +190,8 @@ export interface FoodLog {
   meal_type: MealType;
   source: FoodLogSource;
   logged_at: string;
-  logged_date: string; // date
+  logged_date: string;
+  photo_path: string | null; // date
 }
 
 export interface DailySummary {
@@ -181,6 +203,7 @@ export interface DailySummary {
   fat_g: number;
   calories_burned: number;
   workout_count: number;
+  water_ml: number;
 }
 
 export interface MuscleGroupFatigue {

@@ -16,10 +16,22 @@ export type HomeStackParamList = {
   HomeMain: undefined;
 };
 
+export interface LogMealPrefill {
+  name: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  food_item_id?: string | null;
+}
+
 export type NutritionStackParamList = {
   NutritionHome: undefined;
-  LogMeal: { mode?: 'manual' | 'text' | 'photo' | 'saved' } | undefined;
+  LogMeal: { mode?: 'search' | 'manual' | 'text' | 'photo' | 'saved'; prefill?: LogMealPrefill } | undefined;
   NutritionHistory: undefined;
+  BarcodeScanner: undefined;
+  MealBuilder: undefined;
+  PhotoGallery: undefined;
 };
 
 export type WorkoutsStackParamList = {

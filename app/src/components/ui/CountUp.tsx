@@ -27,8 +27,14 @@ export default function CountUp({ value, style, duration = 240, suffix = '', dec
       duration,
       useNativeDriver: false,
     }).start(() => setDisplay(value));
+    // JS-driven animations depend on requestAnimationFrame, which browsers
+    // throttle in background tabs — guarantee the final value regardless.
+    const failSafe = setTimeout(() => setDisplay(value), duration + 150);
     lastTarget.current = value;
-    return () => anim.removeListener(id);
+    return () => {
+      clearTimeout(failSafe);
+      anim.removeListener(id);
+    };
   }, [anim, value, duration]);
 
   return (
