@@ -8,12 +8,13 @@ import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
-import { fetchDailyLogs } from '../../services/nutrition';
+import { fetchDailyLogs, fetchRecentSummary } from '../../services/nutrition';
 import { fetchLatestGoal } from '../../services/goals';
 import { fetchMuscleFatigue, fetchRoutineMuscleGroups, fetchRoutines } from '../../services/workouts';
 import ScreenContainer from '../../components/ScreenContainer';
 import { Card, Chip, CountUp, ProgressRing, SkeletonCard } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
+import { loggingStreak } from '../../engine/analytics';
 import { Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLog, Goal, Workout } from '../../types/database';
 import {
@@ -30,6 +31,10 @@ type Props = CompositeScreenProps<
 
 const TODAY_WEEKDAY = new Date().getDay();
 
+function todayString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function HomeScreen({ navigation }: Props) {
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -40,6 +45,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [todayRoutine, setTodayRoutine] = useState<Workout | null>(null);
   const [recoveryStates, setRecoveryStates] = useState<MuscleRecoveryState[]>([]);
   const [suggested, setSuggested] = useState<RankedRoutine | null>(null);
+  const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
@@ -51,8 +57,9 @@ export default function HomeScreen({ navigation }: Props) {
       fetchRoutines(user.id),
       fetchMuscleFatigue(user.id).catch(() => []),
       fetchRoutineMuscleGroups(user.id).catch(() => []),
+      fetchRecentSummary(user.id, 40).catch(() => []),
     ])
-      .then(([l, g, routines, fatigue, routineGroups]) => {
+      .then(([l, g, routines, fatigue, routineGroups, recent]) => {
         setLogs(l);
         setGoal(g);
         setTodayRoutine(routines.find((r) => r.day_of_week === TODAY_WEEKDAY) ?? null);
@@ -61,6 +68,10 @@ export default function HomeScreen({ navigation }: Props) {
         const trainedAnything = fatigue.length > 0;
         const ranked = rankRoutinesByRecovery(routineGroups, states);
         setSuggested(trainedAnything && ranked.length > 0 ? ranked[0] : null);
+        const loggedDates = new Set(
+          recent.filter((s) => s.calories_consumed > 0).map((s) => s.day)
+        );
+        setStreak(loggingStreak(loggedDates, todayString()));
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -86,8 +97,18 @@ export default function HomeScreen({ navigation }: Props) {
   return (
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.greeting}>Hey {firstName} 👋</Text>
-        <Text style={styles.subGreeting}>Let's make today count.</Text>
+        <View style={styles.greetingRow}>
+          <View style={styles.greetingCol}>
+            <Text style={styles.greeting}>Hey {firstName} 👋</Text>
+            <Text style={styles.subGreeting}>Let's make today count.</Text>
+          </View>
+          {streak > 0 ? (
+            <View style={styles.streakPill}>
+              <Flame size={16} color={t.colors.energy} />
+              <Text style={styles.streakText}>{streak}</Text>
+            </View>
+          ) : null}
+        </View>
 
         {loading ? (
           <SkeletonCard style={styles.card} />
@@ -201,8 +222,21 @@ export default function HomeScreen({ navigation }: Props) {
 function createStyles(t: Theme) {
   return StyleSheet.create({
   container: { padding: t.spacing.xxl, paddingBottom: 60 },
+  greetingRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: t.spacing.xxl },
+  greetingCol: { flex: 1 },
   greeting: { ...t.typography.h1, color: t.colors.textPrimary },
-  subGreeting: { ...t.typography.body, color: t.colors.textSecondary, marginTop: t.spacing.xs, marginBottom: t.spacing.xxl },
+  subGreeting: { ...t.typography.body, color: t.colors.textSecondary, marginTop: t.spacing.xs },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: t.colors.energyMuted,
+    borderRadius: t.radii.full,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: 6,
+    marginTop: t.spacing.xs,
+  },
+  streakText: { ...t.typography.statSmall, fontSize: 16, color: t.colors.energy },
   loader: { marginTop: t.spacing.xxl },
   card: { marginBottom: t.spacing.xl },
   heroRow: {
