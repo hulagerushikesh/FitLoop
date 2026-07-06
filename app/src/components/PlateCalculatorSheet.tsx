@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import { Theme, useTheme, useThemedStyles } from '../theme';
 import { useUnits } from '../hooks/useUnits';
@@ -43,8 +43,7 @@ export default function PlateCalculatorSheet({ visible, onClose, initialWeight }
     return calculatePlates(targetNum, barNum, plateSizes);
   }, [target, bar, plateSizes]);
 
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+  const body = (
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.header}>
@@ -102,12 +101,26 @@ export default function PlateCalculatorSheet({ visible, onClose, initialWeight }
           )}
         </Pressable>
       </Pressable>
+  );
+
+  // On web, RN <Modal> portals to document.body and escapes the centered phone
+  // frame; render an in-tree absolute overlay instead so it stays inside the
+  // app. Native keeps the real Modal.
+  if (Platform.OS === 'web') {
+    if (!visible) return null;
+    return <View style={styles.webOverlay}>{body}</View>;
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      {body}
     </Modal>
   );
 }
 
 function createStyles(t: Theme) {
   return StyleSheet.create({
+    webOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 },
     backdrop: {
       flex: 1,
       backgroundColor: t.colors.overlay,

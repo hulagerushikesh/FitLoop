@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Dumbbell, Flame, UtensilsCrossed, X } from 'lucide-react-native';
 import { useAuth } from '../hooks/useAuth';
 import { fetchSessionsForDate } from '../services/calendar';
@@ -40,9 +40,8 @@ export default function DayDetailSheet({ visible, date, summary, onClose }: Prop
       .finally(() => setLoading(false));
   }, [visible, user, date]);
 
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+  const body = (
+    <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.grabber} />
           <View style={styles.header}>
@@ -90,7 +89,22 @@ export default function DayDetailSheet({ visible, date, summary, onClose }: Prop
             ))
           )}
         </Pressable>
-      </Pressable>
+    </Pressable>
+  );
+
+  // On web, RN's <Modal> renders through a portal on document.body and escapes
+  // the centered phone frame — the sheet ends up as a detached full-width strip
+  // at the bottom of the whole browser window. Render it as an in-tree absolute
+  // overlay so it stays anchored inside the app. Native keeps the real Modal
+  // (correct full-screen behaviour + hardware back handling).
+  if (Platform.OS === 'web') {
+    if (!visible) return null;
+    return <View style={styles.webOverlay}>{body}</View>;
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      {body}
     </Modal>
   );
 }
@@ -119,6 +133,7 @@ function Stat({
 
 function createStyles(t: Theme) {
   return StyleSheet.create({
+    webOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000 },
     backdrop: { flex: 1, backgroundColor: t.colors.overlay, justifyContent: 'flex-end' },
     sheet: {
       backgroundColor: t.colors.surface,
