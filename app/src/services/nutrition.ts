@@ -67,12 +67,28 @@ export interface NewFoodLogInput {
   photo_path?: string | null;
 }
 
+/** Postgres/PostgREST error for writing to a column the table doesn't have. */
+function isUndefinedColumn(error: { code?: string; message?: string } | null, column: string): boolean {
+  if (!error) return false;
+  return (
+    error.code === '42703' || // undefined_column (Postgres)
+    error.code === 'PGRST204' || // column missing from PostgREST schema cache
+    (typeof error.message === 'string' && error.message.includes(column))
+  );
+}
+
 export async function addFoodLog(userId: string, input: NewFoodLogInput): Promise<FoodLog> {
-  const { data, error } = await supabase
-    .from('food_logs')
-    .insert({ user_id: userId, ...input })
-    .select('*')
-    .single();
+  const row = { user_id: userId, ...input };
+  let { data, error } = await supabase.from('food_logs').insert(row).select('*').single();
+
+  // `photo_path` ships in migration 0006. If the live DB predates it, retry
+  // without that field so logging still works — the photo just isn't attached
+  // until the migration is applied.
+  if (error && isUndefinedColumn(error, 'photo_path')) {
+    const { photo_path: _omit, ...withoutPhoto } = row;
+    ({ data, error } = await supabase.from('food_logs').insert(withoutPhoto).select('*').single());
+  }
+
   if (error) throw error;
   return data as FoodLog;
 }
