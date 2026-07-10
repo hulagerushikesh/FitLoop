@@ -21,6 +21,7 @@ import {
   resyncAllNotifications,
 } from './src/services/notifications';
 import { initOfflineSync } from './src/services/offlineQueue';
+import { registerPushToken } from './src/services/push';
 
 // Surface foregrounded notifications; no-op on web. Safe to run at module load.
 configureNotificationHandler();
@@ -76,6 +77,8 @@ function NotificationBootstrap() {
   useEffect(() => {
     if (!user) return;
     readEnabledPrefs().then((prefs) => resyncAllNotifications(user.id, prefs));
+    // Register this device for server-sent push (no-op on web / Expo Go).
+    registerPushToken(user.id);
   }, [user]);
   return null;
 }
