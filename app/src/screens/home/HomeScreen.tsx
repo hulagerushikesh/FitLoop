@@ -1,18 +1,29 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Calendar, Circle, Dumbbell, Flame, UtensilsCrossed } from 'lucide-react-native';
+import { Camera, Calendar, CheckCircle2, Circle, Dumbbell, Flame, UtensilsCrossed } from 'lucide-react-native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { HomeStackParamList, MainTabParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
-import { fetchDailyLogs, fetchRecentSummary } from '../../services/nutrition';
+import { addFoodLog, fetchDailyLogs, fetchRecentSummary } from '../../services/nutrition';
+import { captureDailyProgressPhoto, fetchProgressPhotoMap } from '../../services/analytics';
 import { fetchLatestGoal } from '../../services/goals';
-import { fetchMuscleFatigue, fetchRoutineMuscleGroups, fetchRoutines } from '../../services/workouts';
+import {
+  fetchExerciseLibrary,
+  fetchMuscleFatigue,
+  fetchRoutineMuscleGroups,
+  fetchRoutines,
+  logActivitySession,
+  logAdhocWorkout,
+} from '../../services/workouts';
 import ScreenContainer from '../../components/ScreenContainer';
-import { Card, Chip, CountUp, ProgressRing, SkeletonCard } from '../../components/ui';
+import { Card, Chip, CountUp, ProgressRing, SkeletonCard, useToast } from '../../components/ui';
+import VoiceLogButton from '../../components/voice/VoiceLogButton';
+import VoiceConfirmModal, { type VoiceWorkoutSaveInput } from '../../components/voice/VoiceConfirmModal';
+import type { VoiceLogResult } from '../../engine/voiceLogParsing';
 import ProgressBar from '../../components/ProgressBar';
 import { loggingStreak } from '../../engine/analytics';
 import { Theme, useTheme, useThemedStyles } from '../../theme';
@@ -40,6 +51,7 @@ export default function HomeScreen({ navigation }: Props) {
   const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const { profile } = useProfile();
+  const { showToast } = useToast();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [todayRoutine, setTodayRoutine] = useState<Workout | null>(null);
@@ -47,6 +59,11 @@ export default function HomeScreen({ navigation }: Props) {
   const [suggested, setSuggested] = useState<RankedRoutine | null>(null);
   const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [library, setLibrary] = useState<{ id: string; name: string }[]>([]);
+  const [voiceResult, setVoiceResult] = useState<VoiceLogResult | null>(null);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [photoDoneToday, setPhotoDoneToday] = useState(false);
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
 
   const load = useCallback(() => {
     if (!user) return;
@@ -58,10 +75,14 @@ export default function HomeScreen({ navigation }: Props) {
       fetchMuscleFatigue(user.id).catch(() => []),
       fetchRoutineMuscleGroups(user.id).catch(() => []),
       fetchRecentSummary(user.id, 40).catch(() => []),
+      fetchExerciseLibrary(user.id).catch(() => []),
+      fetchProgressPhotoMap(user.id, todayString(), todayString()).catch(() => ({})),
     ])
-      .then(([l, g, routines, fatigue, routineGroups, recent]) => {
+      .then(([l, g, routines, fatigue, routineGroups, recent, exercises, todayPhotos]) => {
         setLogs(l);
         setGoal(g);
+        setLibrary(exercises.map((e) => ({ id: e.id, name: e.name })));
+        setPhotoDoneToday(Object.keys(todayPhotos).length > 0);
         setTodayRoutine(routines.find((r) => r.day_of_week === TODAY_WEEKDAY) ?? null);
         const states = computeRecoveryStates(fatigue, new Date());
         setRecoveryStates(states);
@@ -93,6 +114,68 @@ export default function HomeScreen({ navigation }: Props) {
 
   const firstName = profile?.full_name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'there';
   const remaining = goal ? Math.max(0, goal.calorie_target - totals.calories) : null;
+
+  const closeVoice = () => {
+    setVoiceModalVisible(false);
+    setVoiceResult(null);
+  };
+
+  const onVoiceResult = (result: VoiceLogResult) => {
+    setVoiceResult(result);
+    setVoiceModalVisible(true);
+  };
+
+  const onSaveFood = async (food: { name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number }) => {
+    if (!user) return;
+    await addFoodLog(user.id, {
+      name: food.name,
+      servings: 1,
+      calories: food.calories,
+      protein_g: food.protein_g,
+      carbs_g: food.carbs_g,
+      fat_g: food.fat_g,
+      meal_type: 'snack',
+      source: 'ai_text',
+      food_item_id: null,
+      photo_path: null,
+    });
+    closeVoice();
+    showToast('Food logged');
+    load();
+  };
+
+  const onSaveWorkout = async (input: VoiceWorkoutSaveInput) => {
+    if (!user) return;
+    await logAdhocWorkout(user.id, input);
+    closeVoice();
+    showToast(`Logged ${input.exerciseName}`);
+    load();
+  };
+
+  const onSaveActivity = async (activity: { activityName: string; durationMinutes: number | null; estimatedCalories: number | null }) => {
+    if (!user) return;
+    await logActivitySession(user.id, { ...activity, notes: null });
+    closeVoice();
+    showToast(`Logged ${activity.activityName}`);
+    load();
+  };
+
+  const onTakeTodayPhoto = async () => {
+    if (!user || capturingPhoto) return;
+    setCapturingPhoto(true);
+    try {
+      const path = await captureDailyProgressPhoto(user.id);
+      if (path) {
+        setPhotoDoneToday(true);
+        showToast(photoDoneToday ? 'Progress photo updated' : 'Progress photo saved 📸');
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message;
+      showToast(msg || 'Could not save photo', 'error');
+    } finally {
+      setCapturingPhoto(false);
+    }
+  };
 
   return (
     <ScreenContainer>
@@ -214,7 +297,51 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={styles.actionLabel}>Calendar</Text>
           </Pressable>
         </View>
+
+        <Pressable
+          style={[styles.photoAction, photoDoneToday && styles.photoActionDone]}
+          onPress={onTakeTodayPhoto}
+          disabled={capturingPhoto}
+        >
+          <View style={[styles.photoIcon, photoDoneToday && styles.photoIconDone]}>
+            {photoDoneToday ? (
+              <CheckCircle2 size={22} color={t.colors.success} />
+            ) : (
+              <Camera size={22} color={t.colors.accentEmphasis} />
+            )}
+          </View>
+          <View style={styles.photoText}>
+            <Text style={styles.photoTitle}>
+              {photoDoneToday ? "Today's photo captured" : "Take today's progress photo"}
+            </Text>
+            <Text style={styles.photoSubtitle}>
+              {photoDoneToday ? 'Tap to retake · view it in the Calendar' : 'Build the habit — one shot a day'}
+            </Text>
+          </View>
+        </Pressable>
       </ScrollView>
+
+      <View style={styles.fabContainer} pointerEvents="box-none">
+        <VoiceLogButton scope="auto" exerciseLibrary={library} variant="fab" label="Speak a log" onResult={onVoiceResult} onError={(m) => showToast(m, 'error')} />
+      </View>
+
+      <VoiceConfirmModal
+        visible={voiceModalVisible}
+        result={voiceResult}
+        exercises={library}
+        onClose={closeVoice}
+        onSaveFood={onSaveFood}
+        onSaveWorkout={onSaveWorkout}
+        onSaveActivity={onSaveActivity}
+        onRouteFood={(transcript) => {
+          closeVoice();
+          navigation.navigate('Nutrition', { screen: 'LogMeal', params: { mode: 'text', describe: transcript } });
+        }}
+        onRouteWorkout={() => {
+          closeVoice();
+          navigation.navigate('Workouts', { screen: 'WorkoutsHome' });
+        }}
+      />
     </ScreenContainer>
   );
 }
@@ -280,5 +407,30 @@ function createStyles(t: Theme) {
     gap: t.spacing.sm,
   },
   actionLabel: { ...t.typography.caption, color: t.colors.textPrimary, textAlign: 'center' },
+  fabContainer: { position: 'absolute', right: t.spacing.xl, bottom: t.spacing.xl, alignItems: 'center' },
+  photoAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.md,
+    marginTop: t.spacing.md,
+    padding: t.spacing.lg,
+    backgroundColor: t.colors.surface,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    borderRadius: t.radii.lg,
+  },
+  photoActionDone: { borderColor: t.colors.success },
+  photoIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.accentMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoIconDone: { backgroundColor: t.colors.surfaceElevated },
+  photoText: { flex: 1, minWidth: 0 },
+  photoTitle: { ...t.typography.bodyBold, color: t.colors.textPrimary },
+  photoSubtitle: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
 });
 }

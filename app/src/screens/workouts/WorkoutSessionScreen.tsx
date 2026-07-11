@@ -20,6 +20,7 @@ import {
   fetchActiveSession,
   fetchSessionLogs,
   fetchHistoricalSets,
+  fetchExerciseLibrary,
   startSession,
   logSet,
   finishSession,
@@ -39,6 +40,9 @@ import { lbToKg } from '../../utils/units';
 import { successHaptic } from '../../utils/haptics';
 import RestTimer from '../../components/RestTimer';
 import PlateCalculatorSheet from '../../components/PlateCalculatorSheet';
+import VoiceLogButton from '../../components/voice/VoiceLogButton';
+import VoiceConfirmModal, { type VoiceWorkoutSaveInput } from '../../components/voice/VoiceConfirmModal';
+import type { VoiceLogResult } from '../../engine/voiceLogParsing';
 import { Badge, Button, Card, Chip, NumberInput, useToast } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { DEFAULT_REST_SECONDS } from '../../constants/workoutTemplates';
@@ -303,19 +307,24 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [library, setLibrary] = useState<{ id: string; name: string }[]>([]);
+  const [voiceResult, setVoiceResult] = useState<VoiceLogResult | null>(null);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
     (async () => {
-      const [routine, exercises, weight] = await Promise.all([
+      const [routine, exercises, weight, allExercises] = await Promise.all([
         fetchRoutine(workoutId),
         fetchRoutineExercises(workoutId),
         fetchLatestWeight(user.id),
+        fetchExerciseLibrary(user.id).catch(() => []),
       ]);
       setRoutineName(routine.name);
       setRoutineExercises(exercises);
       setBodyWeightKg(weight);
+      setLibrary(allExercises.map((e) => ({ id: e.id, name: e.name })));
 
       const activeSession = await fetchActiveSession(user.id, workoutId);
       const currentSession = activeSession ?? (await startSession(user.id, workoutId, routine.name));
@@ -404,6 +413,31 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
     }
   };
 
+  const onVoiceResult = (result: VoiceLogResult) => {
+    if (result.type === 'workout') {
+      setVoiceResult(result);
+      setVoiceModalVisible(true);
+    } else if (result.type === 'unclear') {
+      showToast(result.message, 'info');
+    } else {
+      showToast(`That sounded like ${result.type} — log it from the ${result.type === 'food' ? 'Nutrition' : 'Home'} tab.`, 'info');
+    }
+  };
+
+  const onVoiceWorkoutSave = async (input: VoiceWorkoutSaveInput) => {
+    for (const set of input.sets) {
+      await onLogSet(input.exerciseId, {
+        weight_kg: set.weightKg,
+        reps: set.reps,
+        rpe: null,
+        set_type: 'normal',
+      });
+    }
+    setVoiceModalVisible(false);
+    setVoiceResult(null);
+    showToast(`Logged ${input.sets.length} set${input.sets.length === 1 ? '' : 's'} of ${input.exerciseName}`);
+  };
+
   const totalSetsLogged = useMemo(
     () => totalSets(loggedSets),
     [loggedSets]
@@ -459,6 +493,14 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
 
           <RestTimer startKey={restTimerKey} defaultSeconds={DEFAULT_REST_SECONDS} />
 
+          <View style={styles.voiceRow}>
+            <View style={styles.voiceText}>
+              <Text style={styles.voiceTitle}>Log a set by voice</Text>
+              <Text style={styles.voiceSubtitle}>e.g. “bench press, 3 sets of 8 at 60 kilos”</Text>
+            </View>
+            <VoiceLogButton scope="workout" exerciseLibrary={library} onResult={onVoiceResult} onError={(m) => showToast(m, 'error')} />
+          </View>
+
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           {routineExercises.map((re) => (
@@ -482,6 +524,17 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
           />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <VoiceConfirmModal
+        visible={voiceModalVisible}
+        result={voiceResult}
+        exercises={library}
+        onClose={() => {
+          setVoiceModalVisible(false);
+          setVoiceResult(null);
+        }}
+        onSaveWorkout={onVoiceWorkoutSave}
+      />
     </ScreenContainer>
   );
 }
@@ -546,6 +599,21 @@ function createStyles(t: Theme) {
     logButtonDisabled: { opacity: 0.4 },
     logButtonText: { color: t.colors.onAccent, fontFamily: FONTS.bold },
     finishButton: { marginTop: t.spacing.xl },
+    voiceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: t.spacing.md,
+      marginTop: t.spacing.md,
+      padding: t.spacing.md,
+      borderRadius: t.radii.lg,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.surface,
+    },
+    voiceText: { flex: 1, minWidth: 0 },
+    voiceTitle: { ...t.typography.bodyBold, color: t.colors.textPrimary },
+    voiceSubtitle: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
     error: { color: t.colors.danger, marginTop: t.spacing.md, textAlign: 'center', ...t.typography.caption },
   });
 }

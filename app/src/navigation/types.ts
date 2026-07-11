@@ -27,7 +27,9 @@ export interface LogMealPrefill {
 
 export type NutritionStackParamList = {
   NutritionHome: undefined;
-  LogMeal: { mode?: 'search' | 'manual' | 'text' | 'photo' | 'saved'; prefill?: LogMealPrefill } | undefined;
+  LogMeal:
+    | { mode?: 'search' | 'manual' | 'text' | 'photo' | 'saved'; prefill?: LogMealPrefill; describe?: string }
+    | undefined;
   NutritionHistory: undefined;
   BarcodeScanner: undefined;
   MealBuilder: undefined;

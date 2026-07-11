@@ -57,6 +57,12 @@
             "backgroundColor": "#0B0B0F"
           }
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "FitLoop uses the microphone so you can log meals, workouts, and activities by voice."
+        }
       ]
     ]
   }

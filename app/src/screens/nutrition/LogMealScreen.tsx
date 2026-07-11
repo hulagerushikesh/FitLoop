@@ -27,6 +27,8 @@ import { supabase } from '../../services/supabase';
 import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
 import { Button } from '../../components/ui';
+import VoiceLogButton from '../../components/voice/VoiceLogButton';
+import type { VoiceLogResult } from '../../engine/voiceLogParsing';
 import ScreenContainer from '../../components/ScreenContainer';
 import { MEAL_TYPE_OPTIONS } from '../../constants/nutritionOptions';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
@@ -107,6 +109,40 @@ export default function LogMealScreen({ navigation, route }: Props) {
     navigation.setParams({ prefill: undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.prefill]);
+
+  // A voice/unclear route can drop a transcript straight into the Describe box.
+  useEffect(() => {
+    const describe = route.params?.describe;
+    if (!describe) return;
+    setMode('text');
+    setDescription(describe);
+    navigation.setParams({ describe: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.describe]);
+
+  const onVoiceResult = (result: VoiceLogResult) => {
+    setError(null);
+    if (result.type === 'food') {
+      setName(result.food.name);
+      setCalories(String(result.food.calories));
+      setProtein(String(result.food.protein_g));
+      setCarbs(String(result.food.carbs_g));
+      setFat(String(result.food.fat_g));
+      setPendingSource('ai_text');
+      if (result.transcript) setDescription(result.transcript);
+    } else {
+      // Scope was "food" but it didn't sound like food — surface the transcript
+      // so the user can edit or take it elsewhere; never silently save.
+      if (result.transcript) setDescription(result.transcript);
+      setError(
+        result.type === 'workout'
+          ? 'That sounded like a workout — log it from the Workouts tab.'
+          : result.type === 'activity'
+            ? 'That sounded like an activity — log it from Home or Workouts.'
+            : (result.type === 'unclear' && result.message) || "Couldn't tell what that was — try again."
+      );
+    }
+  };
 
   const applyPrefill = (p: LogMealPrefill) => {
     setName(p.name);
@@ -420,13 +456,18 @@ export default function LogMealScreen({ navigation, route }: Props) {
                 onChangeText={setDescription}
                 multiline
               />
-              <Button
-                label="Analyze"
-                onPress={onAnalyzeText}
-                disabled={!description.trim()}
-                loading={analyzing}
-                variant="secondary"
-              />
+              <View style={styles.describeRow}>
+                <Button
+                  label="Analyze"
+                  onPress={onAnalyzeText}
+                  disabled={!description.trim()}
+                  loading={analyzing}
+                  variant="secondary"
+                  style={styles.analyzeButton}
+                />
+                <VoiceLogButton scope="food" onResult={onVoiceResult} onError={setError} />
+              </View>
+              <Text style={styles.voiceHint}>Or tap the mic and say what you ate.</Text>
             </>
           ) : null}
 
@@ -623,6 +664,9 @@ function createStyles(t: Theme) {
     fontSize: 13,
     color: t.colors.textPrimary,
   },
+  describeRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
+  analyzeButton: { flex: 1 },
+  voiceHint: { ...t.typography.caption, color: t.colors.textTertiary, marginTop: t.spacing.sm },
   photoButtons: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.sm },
   photoButton: { flex: 1 },
   photoPreview: { width: '100%', height: 200, borderRadius: t.radii.lg, marginTop: t.spacing.sm },

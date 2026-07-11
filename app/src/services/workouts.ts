@@ -1,6 +1,12 @@
 import { supabase } from './supabase';
 import { STANDARD_PLAN } from '../constants/workoutTemplates';
+import { estimateSessionCalories } from '../engine/calorieBurn';
+import { activityToSessionFields, type ActivitySessionFields, type VoiceActivity } from '../engine/voiceLogParsing';
 import type { Exercise, MuscleGroup, MuscleGroupFatigue, SetType, SplitType, Workout, WorkoutExercise, WorkoutLog, WorkoutSession } from '../types/database';
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export async function fetchExerciseLibrary(userId: string): Promise<Exercise[]> {
   const { data, error } = await supabase
@@ -256,6 +262,57 @@ export async function logSet(
     .single();
   if (error) throw error;
   return data as WorkoutLog;
+}
+
+/**
+ * Logs a completed cardio/freeform activity (from voice) as a standalone
+ * workout_session with no linked routine — flagged via activity_name/type so
+ * the calendar and analytics can tell it apart from a lifted routine.
+ */
+export async function logActivitySession(userId: string, activity: VoiceActivity): Promise<void> {
+  const fields: ActivitySessionFields = activityToSessionFields(activity, todayUtc());
+  const { error } = await supabase.from('workout_sessions').insert({
+    user_id: userId,
+    workout_id: null,
+    name: fields.name,
+    activity_name: fields.activity_name,
+    activity_type: fields.activity_type,
+    calories_burned: fields.calories_burned,
+    session_date: fields.session_date,
+    ended_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+/**
+ * Logs a one-off strength exercise (from voice, e.g. on the Home screen where
+ * there's no active routine session): creates a session, writes each set, and
+ * closes it with a rough calorie estimate. Reuses the same logSet/finishSession
+ * path as a normal workout.
+ */
+export async function logAdhocWorkout(
+  userId: string,
+  input: { exerciseId: string; exerciseName: string; sets: { weightKg: number | null; reps: number | null }[] },
+  bodyWeightKg: number | null = null
+): Promise<void> {
+  const session = await startSession(userId, null, input.exerciseName);
+  let setNumber = 1;
+  for (const set of input.sets) {
+    await logSet(userId, session.id, null, input.exerciseId, setNumber, {
+      weight_kg: set.weightKg,
+      reps: set.reps,
+      rpe: null,
+      set_type: 'normal',
+    });
+    setNumber += 1;
+  }
+  const durationMinutes = Math.max(1, input.sets.length * 2);
+  const calories = estimateSessionCalories(
+    [{ metValue: 5, setCount: input.sets.length }],
+    bodyWeightKg ?? 70,
+    durationMinutes
+  );
+  await finishSession(session.id, calories);
 }
 
 /** Sets from the user's most recent completed session for this exercise (excludes the given session). */

@@ -31,7 +31,9 @@ export class RateLimitError extends Error {
   }
 }
 
-async function enforceRateLimit(): Promise<void> {
+// Exported so other AI-backed services (e.g. voice logging) share the SAME
+// client-side budget — total Gemini usage is capped together, not per-feature.
+export async function enforceRateLimit(): Promise<void> {
   const raw = await AsyncStorage.getItem(AI_CALLS_KEY);
   const timestamps: number[] = raw ? JSON.parse(raw) : [];
   const result = checkRateLimit(timestamps, Date.now(), AI_WINDOW_MS, AI_MAX_CALLS);
