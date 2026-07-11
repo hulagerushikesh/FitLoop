@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.rushikeshhulage.fitloop"
+      "bundleIdentifier": "com.rushikeshhulage.fitloop",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.rushikeshhulage.fitloop",
@@ -25,6 +28,18 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "FitLoop uses the camera to scan food barcodes and take meal photos."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "FitLoop needs access to your photos so you can attach meal and progress pictures."
+        }
+      ],
       [
         "expo-notifications",
         {
