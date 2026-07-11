@@ -18,6 +18,12 @@ describe('plansFor', () => {
     expect(streak[0]).toMatchObject({ kind: 'daily', hour: 20, minute: 30 });
   });
 
+  it('schedules one morning daily plan for the progress-photo reminder', () => {
+    const photo = plansFor('progressPhoto');
+    expect(photo).toHaveLength(1);
+    expect(photo[0]).toMatchObject({ kind: 'daily', hour: 8, minute: 30 });
+  });
+
   it('schedules a weekly Monday plan for the recap', () => {
     const recap = plansFor('weeklyRecap');
     expect(recap).toEqual([

@@ -2,7 +2,12 @@
 // schedule. Kept side-effect-free so the mapping is unit-testable; the actual
 // OS scheduling lives in services/notifications.ts.
 
-export type NotifKey = 'mealReminder' | 'workoutReminder' | 'weeklyRecap' | 'streakWarning';
+export type NotifKey =
+  | 'mealReminder'
+  | 'workoutReminder'
+  | 'weeklyRecap'
+  | 'streakWarning'
+  | 'progressPhoto';
 
 export interface DailyPlan {
   kind: 'daily';
@@ -57,6 +62,16 @@ export function plansFor(key: NotifKey, trainingWeekdays: number[] = []): NotifP
           minute: 30,
           title: 'Keep your streak alive 🔥',
           body: 'Log a meal or workout today so your streak survives.',
+        },
+      ];
+    case 'progressPhoto':
+      return [
+        {
+          kind: 'daily',
+          hour: 8,
+          minute: 30,
+          title: 'Progress photo time 📸',
+          body: 'Snap a quick daily photo to see your progress add up.',
         },
       ];
     case 'weeklyRecap':

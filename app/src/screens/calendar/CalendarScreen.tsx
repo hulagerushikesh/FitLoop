@@ -1,12 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchMonthSummary, fetchSummaryRange } from '../../services/calendar';
+import { captureDailyProgressPhoto, fetchProgressPhotoMap } from '../../services/analytics';
 import ScreenContainer from '../../components/ScreenContainer';
 import ContributionHeatmap from '../../components/ContributionHeatmap';
 import DayDetailSheet from '../../components/DayDetailSheet';
-import { Card } from '../../components/ui';
+import { Card, useToast } from '../../components/ui';
 import { dateRange, heatIntensity } from '../../engine/heatmap';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { DailySummary } from '../../types/database';
@@ -54,6 +55,7 @@ export default function CalendarScreen() {
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
+  const { showToast } = useToast();
   const today = todayString();
   const [todayYear, todayMonth] = today.split('-').map(Number);
 
@@ -61,8 +63,17 @@ export default function CalendarScreen() {
   const [month, setMonth] = useState(todayMonth);
   const [summaries, setSummaries] = useState<Record<string, DailySummary>>({});
   const [heatmap, setHeatmap] = useState<Record<string, DailySummary>>({});
+  const [photoMonth, setPhotoMonth] = useState<Record<string, string>>({});
+  const [photoHeatmap, setPhotoHeatmap] = useState<Record<string, string>>({});
+  const [capturingPhoto, setCapturingPhoto] = useState(false);
   const [loadingMonth, setLoadingMonth] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const monthBounds = useMemo(() => {
+    const start = `${year}-${pad(month)}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    return { start, end: `${year}-${pad(month)}-${pad(lastDay)}` };
+  }, [year, month]);
 
   useEffect(() => {
     if (!user) return;
@@ -71,15 +82,43 @@ export default function CalendarScreen() {
       .then((rows) => setSummaries(Object.fromEntries(rows.map((r) => [r.day, r]))))
       .catch(() => setSummaries({}))
       .finally(() => setLoadingMonth(false));
-  }, [user, year, month]);
+    fetchProgressPhotoMap(user.id, monthBounds.start, monthBounds.end)
+      .then(setPhotoMonth)
+      .catch(() => setPhotoMonth({}));
+  }, [user, year, month, monthBounds]);
 
   // Rolling window for the heatmap, independent of the month being browsed.
-  useEffect(() => {
+  const loadHeatmap = useCallback(() => {
     if (!user) return;
     fetchSummaryRange(user.id, daysAgo(HEATMAP_DAYS - 1), today)
       .then((rows) => setHeatmap(Object.fromEntries(rows.map((r) => [r.day, r]))))
       .catch(() => setHeatmap({}));
-  }, [user]);
+    fetchProgressPhotoMap(user.id, daysAgo(HEATMAP_DAYS - 1), today)
+      .then(setPhotoHeatmap)
+      .catch(() => setPhotoHeatmap({}));
+  }, [user, today]);
+
+  useEffect(() => {
+    loadHeatmap();
+  }, [loadHeatmap]);
+
+  const onAddPhotoForToday = async () => {
+    if (!user || capturingPhoto) return;
+    setCapturingPhoto(true);
+    try {
+      const path = await captureDailyProgressPhoto(user.id);
+      if (path) {
+        setPhotoMonth((prev) => ({ ...prev, [today]: path }));
+        setPhotoHeatmap((prev) => ({ ...prev, [today]: path }));
+        showToast('Progress photo saved 📸');
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : (e as { message?: string })?.message;
+      showToast(msg || 'Could not save photo', 'error');
+    } finally {
+      setCapturingPhoto(false);
+    }
+  };
 
   const weeks = useMemo(() => getMonthGrid(year, month), [year, month]);
 
@@ -138,6 +177,7 @@ export default function CalendarScreen() {
           <ContributionHeatmap
             dates={heatmapDates}
             intensityByDate={intensityByDate}
+            photoDates={photoHeatmap}
             today={today}
             selectedDate={selectedDate ?? undefined}
             onDayPress={setSelectedDate}
@@ -175,6 +215,8 @@ export default function CalendarScreen() {
                 const summary = summaries[date];
                 const isToday = date === today;
                 const dayNum = Number(date.slice(-2));
+                const hasWorkout = !!summary && summary.workout_count > 0;
+                const hasPhoto = !!photoMonth[date];
                 return (
                   <Pressable
                     key={di}
@@ -183,7 +225,10 @@ export default function CalendarScreen() {
                     accessibilityLabel={`Open details for ${date}`}
                   >
                     <Text style={[styles.dayNumText, isToday && styles.dayNumTextToday]}>{dayNum}</Text>
-                    {summary && summary.workout_count > 0 ? <View style={styles.dot} /> : null}
+                    <View style={styles.dotRow}>
+                      {hasWorkout ? <View style={styles.dot} /> : null}
+                      {hasPhoto ? <View style={styles.photoDot} /> : null}
+                    </View>
                   </Pressable>
                 );
               })}
@@ -198,6 +243,10 @@ export default function CalendarScreen() {
         visible={selectedDate !== null}
         date={selectedDate}
         summary={selectedSummary}
+        photoPath={selectedDate ? photoMonth[selectedDate] ?? photoHeatmap[selectedDate] ?? null : null}
+        isToday={selectedDate === today}
+        capturingPhoto={capturingPhoto}
+        onAddPhoto={onAddPhotoForToday}
         onClose={() => setSelectedDate(null)}
       />
     </ScreenContainer>
@@ -226,7 +275,9 @@ function createStyles(t: Theme) {
     dayCellFilled: { borderRadius: t.radii.md },
     dayNumText: { fontSize: 14, color: t.colors.textPrimary },
     dayNumTextToday: { color: t.colors.accentEmphasis, fontFamily: FONTS.extrabold },
-    dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: t.colors.accent, marginTop: 2 },
+    dotRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2, height: 5 },
+    dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: t.colors.accent },
+    photoDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: t.colors.energy },
     hint: { ...t.typography.caption, color: t.colors.textTertiary, textAlign: 'center', marginTop: t.spacing.xl },
   });
 }

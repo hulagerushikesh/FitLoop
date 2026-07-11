@@ -1,7 +1,21 @@
+import * as ImagePicker from 'expo-image-picker';
 import { supabase } from './supabase';
 import { earnedAchievements, type AchievementStats } from '../engine/achievements';
 import type { VolumeLogEntry } from '../engine/analytics';
 import type { BodyMetric, MuscleGroup } from '../types/database';
+
+const PROGRESS_BUCKET = 'progress-photos';
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export interface BodyMeasurement {
   id: string;
@@ -115,11 +129,79 @@ export async function fetchProgressPhotos(userId: string): Promise<ProgressPhoto
   return (data ?? []) as ProgressPhoto[];
 }
 
-export async function addProgressPhoto(userId: string, storagePath: string): Promise<void> {
+/**
+ * Records a progress photo for a day, replacing any existing photo for that
+ * same day (one-per-day). Done as delete-then-insert rather than an upsert so
+ * it works whether or not migration 0012's unique index has been applied yet —
+ * the index, once present, is just a belt-and-suspenders DB guarantee.
+ * Defaults to today.
+ */
+export async function addProgressPhoto(
+  userId: string,
+  storagePath: string,
+  takenAt: string = todayUtc()
+): Promise<void> {
+  await supabase.from('progress_photos').delete().eq('user_id', userId).eq('taken_at', takenAt);
   const { error } = await supabase
     .from('progress_photos')
-    .insert({ user_id: userId, storage_path: storagePath });
+    .insert({ user_id: userId, storage_path: storagePath, taken_at: takenAt });
   if (error) throw error;
+}
+
+/**
+ * Opens the camera, uploads the shot to the private progress-photos bucket, and
+ * upserts today's progress_photos row. Returns the storage path, or null if the
+ * user cancels. Mirrors the meal-photo capture flow (expo-image-picker + base64
+ * upload) for consistency.
+ */
+export async function captureDailyProgressPhoto(userId: string): Promise<string | null> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error('Camera permission is needed to take a progress photo.');
+  }
+
+  const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5 });
+  if (result.canceled || !result.assets[0]?.base64) return null;
+
+  const asset = result.assets[0];
+  const takenAt = todayUtc();
+  const path = `${userId}/progress@${Date.now()}.jpg`;
+  const { error: uploadError } = await supabase.storage
+    .from(PROGRESS_BUCKET)
+    .upload(path, base64ToBytes(asset.base64!), {
+      contentType: asset.mimeType ?? 'image/jpeg',
+      upsert: true,
+    });
+  if (uploadError) throw uploadError;
+
+  await addProgressPhoto(userId, path, takenAt);
+  return path;
+}
+
+/** Signed URL for a private progress-photo path (the bucket is not public). */
+export async function signedProgressPhotoUrl(storagePath: string): Promise<string | null> {
+  const { data } = await supabase.storage.from(PROGRESS_BUCKET).createSignedUrl(storagePath, 3600);
+  return data?.signedUrl ?? null;
+}
+
+/** Map of taken_at (YYYY-MM-DD) → storage_path within an inclusive date range. */
+export async function fetchProgressPhotoMap(
+  userId: string,
+  start: string,
+  end: string
+): Promise<Record<string, string>> {
+  const { data, error } = await supabase
+    .from('progress_photos')
+    .select('taken_at, storage_path')
+    .eq('user_id', userId)
+    .gte('taken_at', start)
+    .lte('taken_at', end);
+  if (error) throw error;
+  const out: Record<string, string> = {};
+  for (const row of (data ?? []) as { taken_at: string; storage_path: string }[]) {
+    out[row.taken_at] = row.storage_path;
+  }
+  return out;
 }
 
 // ============================================================================

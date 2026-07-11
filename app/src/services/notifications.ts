@@ -14,6 +14,7 @@ export const NOTIF_KEYS: NotifKey[] = [
   'workoutReminder',
   'weeklyRecap',
   'streakWarning',
+  'progressPhoto',
 ];
 
 /** AsyncStorage key holding the on/off intent for a preference. */

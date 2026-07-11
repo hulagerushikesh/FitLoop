@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Dumbbell, Flame, UtensilsCrossed, X } from 'lucide-react-native';
+import { ActivityIndicator, Image, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Camera, Dumbbell, Flame, UtensilsCrossed, X } from 'lucide-react-native';
 import { useAuth } from '../hooks/useAuth';
 import { fetchSessionsForDate } from '../services/calendar';
+import { signedProgressPhotoUrl } from '../services/analytics';
 import { Theme, useTheme, useThemedStyles } from '../theme';
 import type { DailySummary, WorkoutSession } from '../types/database';
 
@@ -10,6 +11,11 @@ interface Props {
   visible: boolean;
   date: string | null;
   summary?: DailySummary;
+  /** storage_path of the day's progress photo, if any. */
+  photoPath?: string | null;
+  isToday?: boolean;
+  capturingPhoto?: boolean;
+  onAddPhoto?: () => void;
   onClose: () => void;
 }
 
@@ -24,12 +30,22 @@ function formatDateLong(date: string): string {
 }
 
 /** Bottom-sheet detail for a single calendar day: calories, protein, workouts. */
-export default function DayDetailSheet({ visible, date, summary, onClose }: Props) {
+export default function DayDetailSheet({
+  visible,
+  date,
+  summary,
+  photoPath,
+  isToday,
+  capturingPhoto,
+  onAddPhoto,
+  onClose,
+}: Props) {
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [loading, setLoading] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible || !user || !date) return;
@@ -39,6 +55,25 @@ export default function DayDetailSheet({ visible, date, summary, onClose }: Prop
       .catch(() => setSessions([]))
       .finally(() => setLoading(false));
   }, [visible, user, date]);
+
+  // Resolve a signed URL for the day's photo (the bucket is private).
+  useEffect(() => {
+    if (!visible || !photoPath) {
+      setPhotoUrl(null);
+      return;
+    }
+    let active = true;
+    signedProgressPhotoUrl(photoPath)
+      .then((url) => {
+        if (active) setPhotoUrl(url);
+      })
+      .catch(() => {
+        if (active) setPhotoUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [visible, photoPath]);
 
   // Show each workout once — a day can have duplicate sessions of the same
   // routine (e.g. a session resumed/re-created), but the day summary should
@@ -82,6 +117,26 @@ export default function DayDetailSheet({ visible, date, summary, onClose }: Prop
               styles={styles}
             />
           </View>
+
+          {photoUrl || (isToday && onAddPhoto) ? (
+            <>
+              <Text style={styles.subtitle}>Progress photo</Text>
+              {photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" />
+              ) : (
+                <Pressable style={styles.addPhoto} onPress={onAddPhoto} disabled={capturingPhoto}>
+                  {capturingPhoto ? (
+                    <ActivityIndicator color={t.colors.accentEmphasis} />
+                  ) : (
+                    <>
+                      <Camera size={20} color={t.colors.accentEmphasis} />
+                      <Text style={styles.addPhotoText}>Add today's photo</Text>
+                    </>
+                  )}
+                </Pressable>
+              )}
+            </>
+          ) : null}
 
           <Text style={styles.subtitle}>Workouts</Text>
           {loading ? (
@@ -197,6 +252,20 @@ function createStyles(t: Theme) {
       marginTop: t.spacing.sm,
     },
     empty: { ...t.typography.caption, color: t.colors.textTertiary },
+    photo: { width: '100%', height: 220, borderRadius: t.radii.lg, backgroundColor: t.colors.surfaceElevated },
+    addPhoto: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.spacing.sm,
+      paddingVertical: t.spacing.lg,
+      borderRadius: t.radii.lg,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.surfaceElevated,
+    },
+    addPhotoText: { ...t.typography.bodyBold, color: t.colors.accentEmphasis },
     workoutRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
     workoutName: { ...t.typography.body, color: t.colors.textPrimary, flex: 1 },
     workoutBurn: { ...t.typography.caption, color: t.colors.energy },

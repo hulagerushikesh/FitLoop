@@ -22,6 +22,7 @@ const NOTIFICATION_ROWS: { key: NotifKey; label: string; detail: string }[] = [
   { key: 'workoutReminder', label: 'Workout reminders', detail: 'On your scheduled training days' },
   { key: 'weeklyRecap', label: 'Weekly recap', detail: 'When your targets are recalibrated' },
   { key: 'streakWarning', label: 'Streak warnings', detail: 'Before your logging streak breaks' },
+  { key: 'progressPhoto', label: 'Daily progress photo', detail: 'Morning nudge to snap a progress photo' },
 ];
 
 export default function PreferencesScreen() {

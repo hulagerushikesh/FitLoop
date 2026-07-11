@@ -8,6 +8,8 @@ interface Props {
   dates: string[];
   /** date → 0..4 intensity */
   intensityByDate: Record<string, number>;
+  /** dates that have a progress photo (values ignored) → subtle corner dot */
+  photoDates?: Record<string, unknown>;
   today: string;
   selectedDate?: string;
   onDayPress: (date: string) => void;
@@ -25,6 +27,7 @@ const WEEKDAY_LABELS = ['', 'M', '', 'W', '', 'F', ''];
 export default function ContributionHeatmap({
   dates,
   intensityByDate,
+  photoDates,
   today,
   selectedDate,
   onDayPress,
@@ -64,6 +67,7 @@ export default function ContributionHeatmap({
               const level = intensityByDate[date] ?? 0;
               const isToday = date === today;
               const isSelected = date === selectedDate;
+              const hasPhoto = !!photoDates?.[date];
               return (
                 <Pressable
                   key={ri}
@@ -74,7 +78,9 @@ export default function ContributionHeatmap({
                     isToday && styles.cellToday,
                     isSelected && styles.cellSelected,
                   ]}
-                />
+                >
+                  {hasPhoto ? <View style={styles.photoDot} /> : null}
+                </Pressable>
               );
             })}
           </View>
@@ -103,7 +109,14 @@ function createStyles(t: Theme) {
       textAlign: 'center',
     },
     column: { gap: GAP },
-    cell: { width: CELL, height: CELL, borderRadius: 3 },
+    cell: { width: CELL, height: CELL, borderRadius: 3, alignItems: 'flex-end' },
+    photoDot: {
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      margin: 1.5,
+      backgroundColor: t.colors.energy,
+    },
     cellSpacer: { width: CELL, height: CELL, marginBottom: 0 },
     cellToday: { borderWidth: 1.5, borderColor: t.colors.accentEmphasis },
     cellSelected: { borderWidth: 1.5, borderColor: t.colors.textPrimary },
