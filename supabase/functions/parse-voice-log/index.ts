@@ -169,6 +169,12 @@ async function callGemini(
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: RESPONSE_SCHEMA,
+          // Deterministic decoding so the same spoken log is transcribed and
+          // estimated the same way each time. temperature 0 = greedy; the fixed
+          // seed pins tie-breaks. See analyze-meal for the rationale.
+          temperature: 0,
+          topP: 1,
+          seed: 7,
         },
       }),
     }

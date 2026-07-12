@@ -76,6 +76,13 @@ async function callGemini(parts: Array<Record<string, unknown>>): Promise<MealEs
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: RESPONSE_SCHEMA,
+          // Deterministic decoding: the SAME description or photo should always
+          // return the SAME calories/macros. temperature 0 = greedy (no random
+          // sampling); a fixed seed pins any remaining tie-breaks so repeats are
+          // reproducible instead of drifting each call.
+          temperature: 0,
+          topP: 1,
+          seed: 7,
         },
       }),
     }
@@ -91,6 +98,59 @@ async function callGemini(parts: Array<Record<string, unknown>>): Promise<MealEs
   if (!text) throw new Error('Gemini returned no content.');
 
   return JSON.parse(text) as MealEstimate;
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic cache. Gemini isn't reproducible even at temperature 0, so the
+// FIRST estimate for a given input is frozen in ai_estimate_cache and returned
+// for every identical input afterwards (this also cuts Gemini quota usage for
+// repeated foods). We talk DIRECTLY to Postgres via the injected SUPABASE_DB_URL
+// rather than PostgREST — the Data API's GET responses can be edge-cached and
+// its reads proved flaky from inside the function, whereas a direct connection
+// gives reliable read-after-write. The postgres role bypasses RLS. All cache
+// calls are best-effort: any failure falls back to a live Gemini call.
+// ---------------------------------------------------------------------------
+import postgres from 'https://deno.land/x/postgresjs@v3.4.5/mod.js';
+
+const DB_URL = Deno.env.get('SUPABASE_DB_URL');
+let sqlClient: ReturnType<typeof postgres> | null = null;
+function db(): ReturnType<typeof postgres> | null {
+  if (!DB_URL) return null;
+  if (!sqlClient) sqlClient = postgres(DB_URL, { prepare: false, max: 2, idle_timeout: 20 });
+  return sqlClient;
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function cacheGet(key: string): Promise<MealEstimate | null> {
+  const sql = db();
+  if (!sql) return null;
+  try {
+    const rows = await sql`select result from public.ai_estimate_cache where cache_key = ${key} limit 1`;
+    return (rows[0]?.result as MealEstimate | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function cachePut(key: string, result: MealEstimate): Promise<void> {
+  const sql = db();
+  if (!sql) return;
+  try {
+    // Freeze the first estimate: a later miss can never overwrite it.
+    await sql`
+      insert into public.ai_estimate_cache (cache_key, result)
+      values (${key}, ${sql.json(result as unknown as object)})
+      on conflict (cache_key) do nothing
+    `;
+  } catch {
+    // ignore — caching is best-effort
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -112,7 +172,8 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    let estimate: MealEstimate;
+    let parts: Array<Record<string, unknown>>;
+    let cacheKey: string;
 
     if (mode === 'text') {
       const description = body.description;
@@ -122,9 +183,11 @@ Deno.serve(async (req: Request) => {
       if (description.length > MAX_DESCRIPTION_LEN) {
         return badRequest(`description must be ${MAX_DESCRIPTION_LEN} characters or fewer.`);
       }
-      estimate = await callGemini([
-        { text: `Estimate the nutrition for this meal: "${description.trim()}"` },
-      ]);
+      // Normalize (lowercase + collapse whitespace) so "Two Eggs" and
+      // "two  eggs" resolve to the same cached estimate.
+      const normalized = description.trim().toLowerCase().replace(/\s+/g, ' ');
+      cacheKey = `text:${await sha256Hex(normalized)}`;
+      parts = [{ text: `Estimate the nutrition for this meal: "${description.trim()}"` }];
     } else {
       const { imageBase64, mimeType } = body;
       if (typeof imageBase64 !== 'string' || imageBase64.length === 0) {
@@ -137,11 +200,18 @@ Deno.serve(async (req: Request) => {
       if (!ALLOWED_MIME_TYPES.includes(resolvedMime)) {
         return badRequest(`Unsupported image type. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}.`);
       }
-      estimate = await callGemini([
+      // Same image bytes → same cache key → same estimate.
+      cacheKey = `photo:${await sha256Hex(imageBase64)}`;
+      parts = [
         { text: 'Identify the food in this photo and estimate its nutrition.' },
         { inlineData: { mimeType: resolvedMime, data: imageBase64 } },
-      ]);
+      ];
     }
+
+    // Return the frozen estimate if we've seen this exact input before.
+    const cached = await cacheGet(cacheKey);
+    const estimate = cached ?? (await callGemini(parts));
+    if (!cached) await cachePut(cacheKey, estimate);
 
     return new Response(JSON.stringify({ estimate }), {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
