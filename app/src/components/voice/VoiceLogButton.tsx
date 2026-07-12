@@ -9,20 +9,21 @@ import {
   requestRecordingPermissionsAsync,
 } from 'expo-audio';
 import { parseVoiceLog, type VoiceScope } from '../../services/voiceLog';
-import type { VoiceLogResult } from '../../engine/voiceLogParsing';
+import type { VoiceBatch } from '../../engine/voiceLogParsing';
 import { tapHaptic, successHaptic, warningHaptic } from '../../utils/haptics';
-import { Theme, useTheme, useThemedStyles } from '../../theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 
 // Tap to start, tap again to stop — one interaction pattern reused everywhere.
-// Recording auto-stops at MAX_MS to bound cost/latency of the Gemini audio call.
-const MAX_MS = 20_000;
+// Recording auto-stops at MAX_MS to bound cost/latency of the Gemini audio call;
+// generous enough to list several foods/exercises in one go.
+const MAX_MS = 60_000;
 
 type Variant = 'fab' | 'icon';
 
 interface Props {
   scope: VoiceScope;
   exerciseLibrary?: { id: string; name: string }[];
-  onResult: (result: VoiceLogResult) => void;
+  onResult: (batch: VoiceBatch) => void;
   onError?: (message: string) => void;
   variant?: Variant;
   disabled?: boolean;
@@ -157,6 +158,8 @@ export default function VoiceLogButton({
     }
   };
 
+  const elapsedSec = Math.floor((recorderState.durationMillis ?? 0) / 1000);
+  const remainingSec = Math.max(0, Math.ceil(MAX_MS / 1000) - elapsedSec);
   const isFab = variant === 'fab';
   const iconSize = isFab ? 26 : 18;
   const iconColor = isRecording ? t.colors.onAccent : isFab ? t.colors.onAccent : t.colors.textSecondary;
@@ -191,14 +194,27 @@ export default function VoiceLogButton({
     </Pressable>
   );
 
-  if (!isFab) return button;
+  if (!isFab) {
+    // Inline icon: float a small "Ns" countdown above it while recording so the
+    // user can see it's still listening (and how long is left).
+    return (
+      <View style={styles.iconWrap}>
+        {isRecording ? (
+          <View style={styles.timerBadge}>
+            <Text style={styles.timerBadgeText}>{remainingSec}s</Text>
+          </View>
+        ) : null}
+        {button}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.fabWrap}>
       {button}
       {label ? (
         <Text style={styles.fabLabel}>
-          {processing ? 'Thinking…' : isRecording ? 'Tap to stop' : label}
+          {processing ? 'Thinking…' : isRecording ? `Listening · ${remainingSec}s` : label}
         </Text>
       ) : null}
     </View>
@@ -208,6 +224,17 @@ export default function VoiceLogButton({
 function createStyles(t: Theme) {
   return StyleSheet.create({
     // Inline icon (nutrition describe input, workout session)
+    iconWrap: { alignItems: 'center' },
+    timerBadge: {
+      position: 'absolute',
+      top: -18,
+      backgroundColor: t.colors.danger,
+      borderRadius: t.radii.full,
+      paddingHorizontal: t.spacing.sm,
+      paddingVertical: 1,
+      zIndex: 1,
+    },
+    timerBadgeText: { ...t.typography.caption, fontSize: 10, fontFamily: FONTS.bold, color: t.colors.onAccent },
     icon: {
       width: 44,
       height: 44,

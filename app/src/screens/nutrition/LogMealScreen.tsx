@@ -28,7 +28,8 @@ import OptionPicker from '../../components/OptionPicker';
 import TextField from '../../components/TextField';
 import { Button } from '../../components/ui';
 import VoiceLogButton from '../../components/voice/VoiceLogButton';
-import type { VoiceLogResult } from '../../engine/voiceLogParsing';
+import VoiceConfirmModal, { type CommitItem } from '../../components/voice/VoiceConfirmModal';
+import type { VoiceBatch } from '../../engine/voiceLogParsing';
 import ScreenContainer from '../../components/ScreenContainer';
 import { MEAL_TYPE_OPTIONS } from '../../constants/nutritionOptions';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
@@ -69,6 +70,8 @@ export default function LogMealScreen({ navigation, route }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [voiceBatch, setVoiceBatch] = useState<VoiceBatch | null>(null);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
 
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [photoMime, setPhotoMime] = useState<string>('image/jpeg');
@@ -120,28 +123,33 @@ export default function LogMealScreen({ navigation, route }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.describe]);
 
-  const onVoiceResult = (result: VoiceLogResult) => {
+  const onVoiceResult = (batch: VoiceBatch) => {
     setError(null);
-    if (result.type === 'food') {
-      setName(result.food.name);
-      setCalories(String(result.food.calories));
-      setProtein(String(result.food.protein_g));
-      setCarbs(String(result.food.carbs_g));
-      setFat(String(result.food.fat_g));
-      setPendingSource('ai_text');
-      if (result.transcript) setDescription(result.transcript);
-    } else {
-      // Scope was "food" but it didn't sound like food — surface the transcript
-      // so the user can edit or take it elsewhere; never silently save.
-      if (result.transcript) setDescription(result.transcript);
-      setError(
-        result.type === 'workout'
-          ? 'That sounded like a workout — log it from the Workouts tab.'
-          : result.type === 'activity'
-            ? 'That sounded like an activity — log it from Home or Workouts.'
-            : (result.type === 'unclear' && result.message) || "Couldn't tell what that was — try again."
-      );
+    setVoiceBatch(batch);
+    setVoiceModalVisible(true);
+  };
+
+  // Log every spoken food at once, then return to the nutrition home.
+  const onVoiceCommit = async (items: CommitItem[]) => {
+    if (!user) return;
+    for (const item of items) {
+      if (item.kind !== 'food') continue;
+      await addFoodLog(user.id, {
+        name: item.name,
+        servings: 1,
+        calories: item.calories,
+        protein_g: item.protein_g,
+        carbs_g: item.carbs_g,
+        fat_g: item.fat_g,
+        meal_type: mealType,
+        source: 'ai_text',
+        food_item_id: null,
+        photo_path: null,
+      });
     }
+    setVoiceModalVisible(false);
+    setVoiceBatch(null);
+    navigation.navigate('NutritionHome');
   };
 
   const applyPrefill = (p: LogMealPrefill) => {
@@ -578,6 +586,23 @@ export default function LogMealScreen({ navigation, route }: Props) {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <VoiceConfirmModal
+        visible={voiceModalVisible}
+        batch={voiceBatch}
+        supportedKinds={['food']}
+        onCommit={onVoiceCommit}
+        onClose={() => {
+          setVoiceModalVisible(false);
+          setVoiceBatch(null);
+        }}
+        onRouteFood={(transcript) => {
+          setVoiceModalVisible(false);
+          setVoiceBatch(null);
+          setMode('text');
+          setDescription(transcript);
+        }}
+      />
     </ScreenContainer>
   );
 }

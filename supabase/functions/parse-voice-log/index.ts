@@ -22,9 +22,9 @@ const CORS_HEADERS = {
 
 // Input validation limits — reject malformed/oversized requests before they
 // reach Gemini (protects the API bill and against abuse). The client caps
-// recordings at ~20s; a 20s m4a clip is well under ~2 MB, so ~4 MB of base64
+// recordings at ~60s; a 60s m4a clip is well under ~2 MB, so ~8 MB of base64
 // is a generous ceiling.
-const MAX_AUDIO_BASE64_LEN = 6_000_000; // ~4.5 MB decoded
+const MAX_AUDIO_BASE64_LEN = 9_000_000; // ~6.7 MB decoded
 const MAX_LIBRARY_ENTRIES = 300;
 const ALLOWED_MIME_TYPES = [
   'audio/mp4',
@@ -40,50 +40,61 @@ const ALLOWED_MIME_TYPES = [
   'audio/3gpp',
 ];
 
-type VoiceType = 'food' | 'workout' | 'activity' | 'unclear';
-
-// Flattened schema (no nested optional objects) — the most reliable shape for
-// Gemini structured output. The client's voiceLogParsing engine reshapes this
-// into a typed discriminated union.
+// The audio may contain MULTIPLE things ("I had eggs and a banana, and I did
+// bench press and squats"). We return an ARRAY of items so the client can log
+// every one at once. Each item is flattened (no deep nesting beyond the sets
+// array) — the most reliable shape for Gemini structured output. The client's
+// voiceLogParsing engine reshapes this into a typed list.
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    type: { type: 'STRING', enum: ['food', 'workout', 'activity', 'unclear'] },
-    transcript: { type: 'STRING', description: 'Verbatim transcription of the audio.' },
-    message: { type: 'STRING', description: 'For "unclear": a short note on why it could not be classified.' },
-    // food
-    food_name: { type: 'STRING' },
-    food_calories: { type: 'NUMBER' },
-    food_protein_g: { type: 'NUMBER' },
-    food_carbs_g: { type: 'NUMBER' },
-    food_fat_g: { type: 'NUMBER' },
-    food_confidence: { type: 'NUMBER', description: '0..1 confidence in the food estimate.' },
-    // workout
-    workout_exercise_name: { type: 'STRING' },
-    workout_matched_exercise_id: {
+    transcript: { type: 'STRING', description: 'Verbatim transcription of the whole audio.' },
+    unclear_message: {
       type: 'STRING',
-      description: 'The id of the best-matching exercise from the provided library, or empty string if none matches.',
+      description: 'Only when items is empty: a short note on why nothing could be extracted.',
     },
-    workout_notes: { type: 'STRING' },
-    workout_sets: {
+    items: {
       type: 'ARRAY',
+      description: 'One entry per distinct thing the user logged.',
       items: {
         type: 'OBJECT',
         properties: {
-          weight: { type: 'NUMBER' },
-          reps: { type: 'NUMBER' },
-          unit: { type: 'STRING', enum: ['kg', 'lb'] },
+          kind: { type: 'STRING', enum: ['food', 'workout', 'activity'] },
+          // food
+          food_name: { type: 'STRING' },
+          food_calories: { type: 'NUMBER' },
+          food_protein_g: { type: 'NUMBER' },
+          food_carbs_g: { type: 'NUMBER' },
+          food_fat_g: { type: 'NUMBER' },
+          // workout
+          workout_exercise_name: { type: 'STRING' },
+          workout_matched_exercise_id: {
+            type: 'STRING',
+            description: 'Id of the best-matching library exercise, or empty string if none matches.',
+          },
+          workout_notes: { type: 'STRING' },
+          workout_sets: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                weight: { type: 'NUMBER' },
+                reps: { type: 'NUMBER' },
+                unit: { type: 'STRING', enum: ['kg', 'lb'] },
+              },
+              required: ['reps'],
+            },
+          },
+          // activity
+          activity_name: { type: 'STRING' },
+          activity_duration_minutes: { type: 'NUMBER' },
+          activity_estimated_calories: { type: 'NUMBER' },
         },
-        required: ['reps'],
+        required: ['kind'],
       },
     },
-    // activity
-    activity_name: { type: 'STRING' },
-    activity_duration_minutes: { type: 'NUMBER' },
-    activity_estimated_calories: { type: 'NUMBER' },
-    activity_notes: { type: 'STRING' },
   },
-  required: ['type', 'transcript'],
+  required: ['transcript', 'items'],
 };
 
 function badRequest(message: string): Response {
@@ -109,21 +120,24 @@ function buildSystemInstruction(scope: string, library: { id: string; name: stri
       : 'The user has no saved exercises; set workout_matched_exercise_id to "".\n';
 
   return (
-    'You are a logging assistant for a fitness app. You are given a short audio clip in which the user ' +
-    'describes something they ate, a strength workout they did, or a cardio/other activity. ' +
-    'First transcribe the audio into `transcript`. Then classify it and extract structured data:\n' +
-    '- "food": a meal or snack. Fill food_name and a realistic best-effort food_calories/protein/carbs/fat ' +
-    '(assume a typical single serving unless stated) and food_confidence (0..1).\n' +
-    '- "workout": a strength exercise with sets/reps/weight (e.g. "bench press 3 sets of 8 at 60 kilos"). ' +
-    'Fill workout_exercise_name, workout_sets (one entry per set — expand "3 sets of 8" into 3 entries), ' +
-    'and workout_matched_exercise_id. Use the spoken unit (kg/lb); default to kg if unspecified.\n' +
-    '- "activity": cardio or freeform activity not tied to weights (e.g. "I ran for 25 minutes"). ' +
+    'You are a logging assistant for a fitness app. You are given an audio clip in which the user describes ' +
+    'one OR MORE things: foods they ate, strength exercises they did, and/or cardio activities. ' +
+    'First transcribe the whole audio into `transcript`. Then break it into a list of `items`, with ONE ' +
+    'entry per distinct thing:\n' +
+    '- kind "food": a single food or dish. Give EACH distinct food its own item (e.g. "eggs, toast and a ' +
+    'banana" → three food items). Fill food_name and a realistic best-effort food_calories/protein/carbs/fat ' +
+    '(assume a typical single serving unless stated).\n' +
+    '- kind "workout": a single strength exercise with sets/reps/weight (e.g. "bench press 3 sets of 8 at ' +
+    '60 kilos"). Give EACH exercise its own item. Fill workout_exercise_name, workout_sets (one entry per ' +
+    'set — expand "3 sets of 8" into 3 entries), and workout_matched_exercise_id. Use the spoken unit ' +
+    '(kg/lb); default to kg if unspecified.\n' +
+    '- kind "activity": a single cardio/freeform activity not tied to weights (e.g. "I ran for 25 minutes"). ' +
     'Fill activity_name, activity_duration_minutes and a best-effort activity_estimated_calories.\n' +
-    '- "unclear": only when you genuinely cannot tell what was logged. Fill `message` explaining why. ' +
-    'Always still fill `transcript`.\n' +
+    'If you genuinely cannot extract anything, return an empty items array and fill unclear_message. ' +
+    'Always fill `transcript`.\n' +
     scopeHint +
-    'Even under a scope bias, if the content clearly does not match that scope (e.g. a workout described on ' +
-    'the food screen), classify it by its real content or as "unclear" — never force a wrong type.\n' +
+    'Even under a scope bias, classify each item by its real content — never force a wrong kind. If the whole ' +
+    'clip clearly does not match the scope, return an empty items array with an explanation.\n' +
     libraryBlock
   );
 }

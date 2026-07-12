@@ -11,49 +11,58 @@ import {
 } from 'react-native';
 import { Dumbbell, Footprints, Plus, Trash2, UtensilsCrossed, X } from 'lucide-react-native';
 import { useUnits } from '../../hooks/useUnits';
-import { resolveMatchedExercise, type VoiceLogResult, type VoiceWorkoutSet } from '../../engine/voiceLogParsing';
+import { resolveMatchedExercise, type VoiceBatch, type VoiceKind } from '../../engine/voiceLogParsing';
 import { Button } from '../ui';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 
-export interface VoiceWorkoutSaveInput {
-  exerciseId: string;
-  exerciseName: string;
-  sets: { weightKg: number | null; reps: number | null }[];
-}
+// What the modal hands back once the user confirms — fully edited and
+// normalized (weights already in kg), ready for the caller to persist.
+export type CommitItem =
+  | { kind: 'food'; name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number }
+  | { kind: 'workout'; exerciseId: string; exerciseName: string; sets: { weightKg: number | null; reps: number | null }[] }
+  | { kind: 'activity'; activityName: string; durationMinutes: number | null; estimatedCalories: number | null };
 
 interface Props {
   visible: boolean;
-  result: VoiceLogResult | null;
-  /** Library used to resolve/choose the matched exercise (workout mode). */
+  batch: VoiceBatch | null;
+  /** Library used to resolve/choose matched exercises (workout rows). */
   exercises?: { id: string; name: string }[];
+  /** Which kinds this entry point can persist; other kinds are hidden. */
+  supportedKinds: VoiceKind[];
+  /** Persist every confirmed item at once; caller toasts + reloads + closes. */
+  onCommit: (items: CommitItem[]) => Promise<void> | void;
   onClose: () => void;
-  onSaveFood?: (food: { name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number }) => Promise<void> | void;
-  onSaveWorkout?: (input: VoiceWorkoutSaveInput) => Promise<void> | void;
-  onSaveActivity?: (activity: { activityName: string; durationMinutes: number | null; estimatedCalories: number | null }) => Promise<void> | void;
-  /** Unclear fallback routes: hand the transcript to a manual-entry flow. */
+  /** Unclear fallback (no items): hand the transcript to a manual-entry flow. */
   onRouteFood?: (transcript: string) => void;
   onRouteWorkout?: (transcript: string) => void;
 }
 
-interface EditableSet {
-  weight: string;
-  reps: string;
-}
+type FoodRow = { key: string; kind: 'food'; name: string; calories: string; protein: string; carbs: string; fat: string };
+type WorkoutRow = {
+  key: string;
+  kind: 'workout';
+  exerciseName: string;
+  selected: { id: string; name: string } | null;
+  showPicker: boolean;
+  query: string;
+  sets: { weight: string; reps: string }[];
+};
+type ActivityRow = { key: string; kind: 'activity'; activityName: string; duration: string; calories: string };
+type Row = FoodRow | WorkoutRow | ActivityRow;
 
 /**
- * Confirmation/edit sheet for a parsed voice log. Nothing is ever saved without
- * an explicit tap here — the parsed values are only PRE-FILLED. Rendered as an
- * in-tree overlay on web (so it stays inside the centered phone frame) and a
- * real Modal on native, matching DayDetailSheet.
+ * Confirmation/edit sheet for a parsed voice batch. Lists EVERY item the user
+ * spoke (foods, exercises, activities), each editable, and logs them all with
+ * one tap. Nothing is ever saved without that tap — values are only pre-filled.
+ * In-tree overlay on web (stays inside the phone frame), real Modal on native.
  */
 export default function VoiceConfirmModal({
   visible,
-  result,
+  batch,
   exercises = [],
+  supportedKinds,
+  onCommit,
   onClose,
-  onSaveFood,
-  onSaveWorkout,
-  onSaveActivity,
   onRouteFood,
   onRouteWorkout,
 }: Props) {
@@ -61,111 +70,135 @@ export default function VoiceConfirmModal({
   const styles = useThemedStyles(createStyles);
   const units = useUnits();
   const [saving, setSaving] = useState(false);
+  const [rows, setRows] = useState<Row[]>([]);
 
-  // Food fields
-  const [foodName, setFoodName] = useState('');
-  const [calories, setCalories] = useState('');
-  const [protein, setProtein] = useState('');
-  const [carbs, setCarbs] = useState('');
-  const [fat, setFat] = useState('');
-
-  // Workout fields
-  const [selectedExercise, setSelectedExercise] = useState<{ id: string; name: string } | null>(null);
-  const [exerciseQuery, setExerciseQuery] = useState('');
-  const [showPicker, setShowPicker] = useState(false);
-  const [sets, setSets] = useState<EditableSet[]>([]);
-
-  // Activity fields
-  const [activityName, setActivityName] = useState('');
-  const [duration, setDuration] = useState('');
-  const [activityCalories, setActivityCalories] = useState('');
-
-  // Re-seed editable state whenever a new result comes in.
+  // Re-seed editable rows whenever a new batch comes in (supported kinds only).
   useEffect(() => {
-    if (!result) return;
+    if (!batch) return;
     setSaving(false);
-    setShowPicker(false);
-    setExerciseQuery('');
-    if (result.type === 'food') {
-      setFoodName(result.food.name);
-      setCalories(String(result.food.calories));
-      setProtein(String(result.food.protein_g));
-      setCarbs(String(result.food.carbs_g));
-      setFat(String(result.food.fat_g));
-    } else if (result.type === 'workout') {
-      const matched = resolveMatchedExercise(result.workout, exercises);
-      setSelectedExercise(matched ?? null);
-      setShowPicker(matched == null);
-      const seed: VoiceWorkoutSet[] = result.workout.sets.length > 0 ? result.workout.sets : [{ weightKg: null, reps: null }];
-      setSets(
-        seed.map((s) => ({
-          weight: s.weightKg != null ? String(units.displayWeight(s.weightKg)) : '',
-          reps: s.reps != null ? String(s.reps) : '',
-        }))
-      );
-    } else if (result.type === 'activity') {
-      setActivityName(result.activity.activityName);
-      setDuration(result.activity.durationMinutes != null ? String(result.activity.durationMinutes) : '');
-      setActivityCalories(result.activity.estimatedCalories != null ? String(result.activity.estimatedCalories) : '');
+    let seq = 0;
+    const next: Row[] = [];
+    for (const item of batch.items) {
+      if (!supportedKinds.includes(item.kind)) continue;
+      const key = `r${seq++}`;
+      if (item.kind === 'food') {
+        next.push({
+          key,
+          kind: 'food',
+          name: item.name,
+          calories: String(item.calories),
+          protein: String(item.protein_g),
+          carbs: String(item.carbs_g),
+          fat: String(item.fat_g),
+        });
+      } else if (item.kind === 'workout') {
+        const matched = resolveMatchedExercise(item, exercises);
+        next.push({
+          key,
+          kind: 'workout',
+          exerciseName: item.exerciseName,
+          selected: matched ?? null,
+          showPicker: matched == null,
+          query: '',
+          sets:
+            item.sets.length > 0
+              ? item.sets.map((s) => ({
+                  weight: s.weightKg != null ? String(units.displayWeight(s.weightKg)) : '',
+                  reps: s.reps != null ? String(s.reps) : '',
+                }))
+              : [{ weight: '', reps: '' }],
+        });
+      } else {
+        next.push({
+          key,
+          kind: 'activity',
+          activityName: item.activityName,
+          duration: item.durationMinutes != null ? String(item.durationMinutes) : '',
+          calories: item.estimatedCalories != null ? String(item.estimatedCalories) : '',
+        });
+      }
     }
+    setRows(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result]);
+  }, [batch]);
 
-  const filteredExercises = useMemo(() => {
-    const q = exerciseQuery.trim().toLowerCase();
-    const list = q ? exercises.filter((e) => e.name.toLowerCase().includes(q)) : exercises;
-    return list.slice(0, 40);
-  }, [exercises, exerciseQuery]);
+  const patchRow = (key: string, patch: Partial<Row>) =>
+    setRows((prev) => prev.map((r) => (r.key === key ? ({ ...r, ...patch } as Row) : r)));
+  const removeRow = (key: string) => setRows((prev) => prev.filter((r) => r.key !== key));
 
-  if (!result) return null;
+  const patchSet = (key: string, i: number, patch: Partial<{ weight: string; reps: string }>) =>
+    setRows((prev) =>
+      prev.map((r) =>
+        r.key === key && r.kind === 'workout'
+          ? { ...r, sets: r.sets.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) }
+          : r
+      )
+    );
+  const addSet = (key: string) =>
+    setRows((prev) =>
+      prev.map((r) =>
+        r.key === key && r.kind === 'workout'
+          ? { ...r, sets: [...r.sets, { weight: r.sets[r.sets.length - 1]?.weight ?? '', reps: '' }] }
+          : r
+      )
+    );
+  const removeSet = (key: string, i: number) =>
+    setRows((prev) =>
+      prev.map((r) =>
+        r.key === key && r.kind === 'workout' && r.sets.length > 1
+          ? { ...r, sets: r.sets.filter((_, idx) => idx !== i) }
+          : r
+      )
+    );
 
-  const doSave = async (fn: () => Promise<void> | void) => {
+  // Every workout row must have an exercise chosen before we can log the batch.
+  const unresolvedWorkout = rows.some((r) => r.kind === 'workout' && !r.selected);
+  const canCommit = rows.length > 0 && !unresolvedWorkout;
+
+  const commit = async () => {
+    const items: CommitItem[] = [];
+    for (const r of rows) {
+      if (r.kind === 'food') {
+        if (!r.name.trim()) continue;
+        items.push({
+          kind: 'food',
+          name: r.name.trim(),
+          calories: Number(r.calories) || 0,
+          protein_g: Number(r.protein) || 0,
+          carbs_g: Number(r.carbs) || 0,
+          fat_g: Number(r.fat) || 0,
+        });
+      } else if (r.kind === 'workout') {
+        if (!r.selected) continue;
+        const sets = r.sets
+          .map((s) => ({
+            weightKg: s.weight.trim() ? units.parseWeight(Number(s.weight)) : null,
+            reps: s.reps.trim() ? Number(s.reps) : null,
+          }))
+          .filter((s) => s.reps != null || s.weightKg != null);
+        items.push({ kind: 'workout', exerciseId: r.selected.id, exerciseName: r.selected.name, sets });
+      } else {
+        if (!r.activityName.trim()) continue;
+        items.push({
+          kind: 'activity',
+          activityName: r.activityName.trim(),
+          durationMinutes: r.duration.trim() ? Number(r.duration) : null,
+          estimatedCalories: r.calories.trim() ? Number(r.calories) : null,
+        });
+      }
+    }
+    if (items.length === 0) return;
     setSaving(true);
     try {
-      await fn();
+      await onCommit(items);
     } finally {
       setSaving(false);
     }
   };
 
-  const onLogFood = () =>
-    doSave(async () => {
-      await onSaveFood?.({
-        name: foodName.trim(),
-        calories: Number(calories) || 0,
-        protein_g: Number(protein) || 0,
-        carbs_g: Number(carbs) || 0,
-        fat_g: Number(fat) || 0,
-      });
-    });
+  const isUnclear = !!batch && rows.length === 0;
 
-  const onLogWorkout = () =>
-    doSave(async () => {
-      if (!selectedExercise) return;
-      const parsedSets = sets
-        .map((s) => ({
-          weightKg: s.weight.trim() ? units.parseWeight(Number(s.weight)) : null,
-          reps: s.reps.trim() ? Number(s.reps) : null,
-        }))
-        .filter((s) => s.reps != null || s.weightKg != null);
-      await onSaveWorkout?.({ exerciseId: selectedExercise.id, exerciseName: selectedExercise.name, sets: parsedSets });
-    });
-
-  const onLogActivity = () =>
-    doSave(async () => {
-      await onSaveActivity?.({
-        activityName: activityName.trim(),
-        durationMinutes: duration.trim() ? Number(duration) : null,
-        estimatedCalories: activityCalories.trim() ? Number(activityCalories) : null,
-      });
-    });
-
-  const updateSet = (i: number, patch: Partial<EditableSet>) =>
-    setSets((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
-  const addSet = () => setSets((prev) => [...prev, { weight: prev[prev.length - 1]?.weight ?? '', reps: '' }]);
-  const removeSet = (i: number) => setSets((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
-
-  const macroInput = (label: string, value: string, setter: (v: string) => void, decimal = true) => (
+  const macroInput = (label: string, value: string, onChange: (v: string) => void, decimal = true) => (
     <View style={styles.macroField}>
       <Text style={styles.macroFieldLabel}>{label}</Text>
       <TextInput
@@ -174,171 +207,187 @@ export default function VoiceConfirmModal({
         placeholderTextColor={t.colors.textTertiary}
         keyboardType={decimal ? 'decimal-pad' : 'number-pad'}
         value={value}
-        onChangeText={setter}
+        onChangeText={onChange}
       />
     </View>
   );
 
-  let title = 'Confirm log';
-  let icon = <UtensilsCrossed size={18} color={t.colors.accentEmphasis} />;
-  if (result.type === 'workout') {
-    title = 'Confirm workout';
-    icon = <Dumbbell size={18} color={t.colors.accentEmphasis} />;
-  } else if (result.type === 'activity') {
-    title = 'Confirm activity';
-    icon = <Footprints size={18} color={t.colors.accentEmphasis} />;
-  } else if (result.type === 'unclear') {
-    title = 'Where should this go?';
-  }
+  if (!batch) return null;
 
   const body = (
     <Pressable style={styles.backdrop} onPress={onClose}>
       <Pressable style={styles.sheet} onPress={() => {}}>
         <View style={styles.grabber} />
         <View style={styles.header}>
-          <View style={styles.titleRow}>
-            {icon}
-            <Text style={styles.title}>{title}</Text>
-          </View>
+          <Text style={styles.title}>
+            {isUnclear ? 'Where should this go?' : `Confirm ${rows.length} ${rows.length === 1 ? 'item' : 'items'}`}
+          </Text>
           <Pressable onPress={onClose} hitSlop={12} accessibilityLabel="Cancel">
             <X size={20} color={t.colors.textSecondary} />
           </Pressable>
         </View>
 
-        {result.transcript ? <Text style={styles.transcript}>“{result.transcript}”</Text> : null}
+        {batch.transcript ? <Text style={styles.transcript}>“{batch.transcript}”</Text> : null}
 
         <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
-          {result.type === 'food' ? (
+          {isUnclear ? (
             <>
-              <Text style={styles.label}>Food</Text>
-              <TextInput
-                style={styles.textInput}
-                value={foodName}
-                onChangeText={setFoodName}
-                placeholder="Name"
-                placeholderTextColor={t.colors.textTertiary}
-              />
-              <View style={styles.macroRow}>
-                {macroInput('Kcal', calories, setCalories, false)}
-                {macroInput('Protein', protein, setProtein)}
-                {macroInput('Carbs', carbs, setCarbs)}
-                {macroInput('Fat', fat, setFat)}
-              </View>
-              <Button label="Log food" onPress={onLogFood} loading={saving} disabled={!foodName.trim()} style={styles.cta} />
+              <Text style={styles.unclearMsg}>{batch.message ?? "Couldn't tell what to log."}</Text>
+              {onRouteFood || onRouteWorkout ? (
+                <View style={styles.routeRow}>
+                  {onRouteFood ? (
+                    <Button label="Log as food" variant="secondary" style={styles.routeButton} onPress={() => onRouteFood(batch.transcript)} />
+                  ) : null}
+                  {onRouteWorkout ? (
+                    <Button label="Log as workout" variant="secondary" style={styles.routeButton} onPress={() => onRouteWorkout(batch.transcript)} />
+                  ) : null}
+                </View>
+              ) : null}
             </>
-          ) : null}
-
-          {result.type === 'workout' ? (
-            <>
-              <Text style={styles.label}>Exercise</Text>
-              {selectedExercise && !showPicker ? (
-                <Pressable style={styles.selectedExercise} onPress={() => setShowPicker(true)}>
-                  <Text style={styles.selectedExerciseName}>{selectedExercise.name}</Text>
-                  <Text style={styles.changeLink}>Change</Text>
-                </Pressable>
-              ) : (
-                <>
-                  <TextInput
-                    style={styles.textInput}
-                    value={exerciseQuery}
-                    onChangeText={setExerciseQuery}
-                    placeholder="Search your exercises"
-                    placeholderTextColor={t.colors.textTertiary}
-                  />
-                  <View style={styles.pickerList}>
-                    {filteredExercises.map((e) => (
-                      <Pressable
-                        key={e.id}
-                        style={[styles.pickerRow, selectedExercise?.id === e.id && styles.pickerRowActive]}
-                        onPress={() => {
-                          setSelectedExercise(e);
-                          setShowPicker(false);
-                        }}
-                      >
-                        <Text style={styles.pickerRowText}>{e.name}</Text>
-                      </Pressable>
-                    ))}
-                    {filteredExercises.length === 0 ? (
-                      <Text style={styles.empty}>No matching exercise in your library.</Text>
-                    ) : null}
+          ) : (
+            rows.map((r) => (
+              <View key={r.key} style={styles.itemCard}>
+                <View style={styles.itemHeader}>
+                  <View style={styles.itemTitleRow}>
+                    {r.kind === 'food' ? (
+                      <UtensilsCrossed size={16} color={t.colors.accentEmphasis} />
+                    ) : r.kind === 'workout' ? (
+                      <Dumbbell size={16} color={t.colors.accentEmphasis} />
+                    ) : (
+                      <Footprints size={16} color={t.colors.accentEmphasis} />
+                    )}
+                    <Text style={styles.itemKind}>{r.kind}</Text>
                   </View>
-                </>
-              )}
-
-              <Text style={styles.label}>Sets</Text>
-              {sets.map((s, i) => (
-                <View key={i} style={styles.setRow}>
-                  <Text style={styles.setNum}>{i + 1}</Text>
-                  <View style={styles.setField}>
-                    <Text style={styles.macroFieldLabel}>{units.weightUnit}</Text>
-                    <TextInput
-                      style={styles.macroInput}
-                      value={s.weight}
-                      onChangeText={(v) => updateSet(i, { weight: v })}
-                      keyboardType="decimal-pad"
-                      placeholder="-"
-                      placeholderTextColor={t.colors.textTertiary}
-                    />
-                  </View>
-                  <View style={styles.setField}>
-                    <Text style={styles.macroFieldLabel}>Reps</Text>
-                    <TextInput
-                      style={styles.macroInput}
-                      value={s.reps}
-                      onChangeText={(v) => updateSet(i, { reps: v })}
-                      keyboardType="number-pad"
-                      placeholder="-"
-                      placeholderTextColor={t.colors.textTertiary}
-                    />
-                  </View>
-                  <Pressable onPress={() => removeSet(i)} hitSlop={8} style={styles.setRemove} accessibilityLabel="Remove set">
+                  <Pressable onPress={() => removeRow(r.key)} hitSlop={8} accessibilityLabel="Remove item">
                     <Trash2 size={16} color={t.colors.textTertiary} />
                   </Pressable>
                 </View>
-              ))}
-              <Pressable style={styles.addSet} onPress={addSet}>
-                <Plus size={16} color={t.colors.accentEmphasis} />
-                <Text style={styles.addSetText}>Add set</Text>
-              </Pressable>
 
-              <Button
-                label="Log workout"
-                onPress={onLogWorkout}
-                loading={saving}
-                disabled={!selectedExercise}
-                style={styles.cta}
-              />
-            </>
-          ) : null}
+                {r.kind === 'food' ? (
+                  <>
+                    <TextInput
+                      style={styles.textInput}
+                      value={r.name}
+                      onChangeText={(v) => patchRow(r.key, { name: v })}
+                      placeholder="Food name"
+                      placeholderTextColor={t.colors.textTertiary}
+                    />
+                    <View style={styles.macroRow}>
+                      {macroInput('Kcal', r.calories, (v) => patchRow(r.key, { calories: v }), false)}
+                      {macroInput('Protein', r.protein, (v) => patchRow(r.key, { protein: v }))}
+                      {macroInput('Carbs', r.carbs, (v) => patchRow(r.key, { carbs: v }))}
+                      {macroInput('Fat', r.fat, (v) => patchRow(r.key, { fat: v }))}
+                    </View>
+                  </>
+                ) : null}
 
-          {result.type === 'activity' ? (
-            <>
-              <Text style={styles.label}>Activity</Text>
-              <TextInput
-                style={styles.textInput}
-                value={activityName}
-                onChangeText={setActivityName}
-                placeholder="e.g. Running"
-                placeholderTextColor={t.colors.textTertiary}
-              />
-              <View style={styles.macroRow}>
-                {macroInput('Minutes', duration, setDuration, false)}
-                {macroInput('Est. kcal', activityCalories, setActivityCalories, false)}
+                {r.kind === 'workout' ? (
+                  <>
+                    {r.selected && !r.showPicker ? (
+                      <Pressable style={styles.selectedExercise} onPress={() => patchRow(r.key, { showPicker: true })}>
+                        <Text style={styles.selectedExerciseName}>{r.selected.name}</Text>
+                        <Text style={styles.changeLink}>Change</Text>
+                      </Pressable>
+                    ) : (
+                      <>
+                        <TextInput
+                          style={styles.textInput}
+                          value={r.query}
+                          onChangeText={(v) => patchRow(r.key, { query: v })}
+                          placeholder={r.exerciseName ? `Heard "${r.exerciseName}" — pick a match` : 'Search your exercises'}
+                          placeholderTextColor={t.colors.textTertiary}
+                        />
+                        <View style={styles.pickerList}>
+                          {exercises
+                            .filter((e) => {
+                              const q = r.query.trim().toLowerCase();
+                              return q ? e.name.toLowerCase().includes(q) : true;
+                            })
+                            .slice(0, 30)
+                            .map((e) => (
+                              <Pressable
+                                key={e.id}
+                                style={[styles.pickerRow, r.selected?.id === e.id && styles.pickerRowActive]}
+                                onPress={() => patchRow(r.key, { selected: e, showPicker: false })}
+                              >
+                                <Text style={styles.pickerRowText}>{e.name}</Text>
+                              </Pressable>
+                            ))}
+                        </View>
+                      </>
+                    )}
+
+                    {r.sets.map((s, i) => (
+                      <View key={i} style={styles.setRow}>
+                        <Text style={styles.setNum}>{i + 1}</Text>
+                        <View style={styles.setField}>
+                          <Text style={styles.macroFieldLabel}>{units.weightUnit}</Text>
+                          <TextInput
+                            style={styles.macroInput}
+                            value={s.weight}
+                            onChangeText={(v) => patchSet(r.key, i, { weight: v })}
+                            keyboardType="decimal-pad"
+                            placeholder="-"
+                            placeholderTextColor={t.colors.textTertiary}
+                          />
+                        </View>
+                        <View style={styles.setField}>
+                          <Text style={styles.macroFieldLabel}>Reps</Text>
+                          <TextInput
+                            style={styles.macroInput}
+                            value={s.reps}
+                            onChangeText={(v) => patchSet(r.key, i, { reps: v })}
+                            keyboardType="number-pad"
+                            placeholder="-"
+                            placeholderTextColor={t.colors.textTertiary}
+                          />
+                        </View>
+                        <Pressable onPress={() => removeSet(r.key, i)} hitSlop={8} style={styles.setRemove} accessibilityLabel="Remove set">
+                          <Trash2 size={14} color={t.colors.textTertiary} />
+                        </Pressable>
+                      </View>
+                    ))}
+                    <Pressable style={styles.addSet} onPress={() => addSet(r.key)}>
+                      <Plus size={14} color={t.colors.accentEmphasis} />
+                      <Text style={styles.addSetText}>Add set</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+
+                {r.kind === 'activity' ? (
+                  <>
+                    <TextInput
+                      style={styles.textInput}
+                      value={r.activityName}
+                      onChangeText={(v) => patchRow(r.key, { activityName: v })}
+                      placeholder="Activity (e.g. Running)"
+                      placeholderTextColor={t.colors.textTertiary}
+                    />
+                    <View style={styles.macroRow}>
+                      {macroInput('Minutes', r.duration, (v) => patchRow(r.key, { duration: v }), false)}
+                      {macroInput('Est. kcal', r.calories, (v) => patchRow(r.key, { calories: v }), false)}
+                    </View>
+                  </>
+                ) : null}
               </View>
-              <Button label="Log activity" onPress={onLogActivity} loading={saving} disabled={!activityName.trim()} style={styles.cta} />
-            </>
-          ) : null}
-
-          {result.type === 'unclear' ? (
-            <>
-              <Text style={styles.unclearMsg}>{result.message}</Text>
-              <View style={styles.routeRow}>
-                <Button label="Log as food" variant="secondary" style={styles.routeButton} onPress={() => onRouteFood?.(result.transcript)} />
-                <Button label="Log as workout" variant="secondary" style={styles.routeButton} onPress={() => onRouteWorkout?.(result.transcript)} />
-              </View>
-            </>
-          ) : null}
+            ))
+          )}
         </ScrollView>
+
+        {!isUnclear ? (
+          <>
+            {unresolvedWorkout ? (
+              <Text style={styles.hint}>Pick an exercise for each workout to log the batch.</Text>
+            ) : null}
+            <Button
+              label={rows.length > 1 ? `Log all ${rows.length}` : 'Log it'}
+              onPress={commit}
+              loading={saving}
+              disabled={!canCommit}
+              style={styles.cta}
+            />
+          </>
+        ) : null}
       </Pressable>
     </Pressable>
   );
@@ -369,7 +418,7 @@ function createStyles(t: Theme) {
     sheet: {
       width: '100%',
       maxWidth: isWeb ? 440 : undefined,
-      maxHeight: '86%',
+      maxHeight: '88%',
       alignSelf: 'center',
       backgroundColor: t.colors.surface,
       borderTopLeftRadius: t.radii.xl,
@@ -390,21 +439,24 @@ function createStyles(t: Theme) {
       opacity: isWeb ? 0 : 1,
     },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
     title: { ...t.typography.h3, color: t.colors.textPrimary },
     transcript: { ...t.typography.body, color: t.colors.textSecondary, fontStyle: 'italic' },
     scroll: { marginTop: t.spacing.xs },
-    label: {
-      ...t.typography.label,
-      color: t.colors.textSecondary,
-      textTransform: 'uppercase',
-      marginTop: t.spacing.md,
-      marginBottom: t.spacing.xs,
-    },
-    textInput: {
+    itemCard: {
       borderWidth: 1,
       borderColor: t.colors.border,
       backgroundColor: t.colors.surfaceElevated,
+      borderRadius: t.radii.lg,
+      padding: t.spacing.md,
+      marginBottom: t.spacing.md,
+    },
+    itemHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: t.spacing.sm },
+    itemTitleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+    itemKind: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase' },
+    textInput: {
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.surface,
       borderRadius: t.radii.md,
       paddingHorizontal: t.spacing.md,
       paddingVertical: t.spacing.md,
@@ -424,7 +476,7 @@ function createStyles(t: Theme) {
     macroInput: {
       borderWidth: 1,
       borderColor: t.colors.border,
-      backgroundColor: t.colors.surfaceElevated,
+      backgroundColor: t.colors.surface,
       borderRadius: t.radii.md,
       padding: t.spacing.sm,
       fontSize: 14,
@@ -436,31 +488,27 @@ function createStyles(t: Theme) {
       justifyContent: 'space-between',
       borderWidth: 1,
       borderColor: t.colors.accent,
-      backgroundColor: t.colors.surfaceElevated,
+      backgroundColor: t.colors.surface,
       borderRadius: t.radii.md,
       paddingHorizontal: t.spacing.md,
       paddingVertical: t.spacing.md,
     },
     selectedExerciseName: { ...t.typography.bodyBold, color: t.colors.textPrimary, flex: 1 },
     changeLink: { ...t.typography.caption, color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
-    pickerList: { maxHeight: 180, marginTop: t.spacing.xs },
-    pickerRow: {
-      paddingVertical: t.spacing.sm,
-      paddingHorizontal: t.spacing.md,
-      borderRadius: t.radii.sm,
-    },
+    pickerList: { maxHeight: 150, marginTop: t.spacing.xs },
+    pickerRow: { paddingVertical: t.spacing.sm, paddingHorizontal: t.spacing.md, borderRadius: t.radii.sm },
     pickerRowActive: { backgroundColor: t.colors.accentMuted },
     pickerRowText: { ...t.typography.body, color: t.colors.textPrimary },
-    empty: { ...t.typography.caption, color: t.colors.textTertiary, paddingVertical: t.spacing.sm },
     setRow: { flexDirection: 'row', alignItems: 'flex-end', gap: t.spacing.sm, marginTop: t.spacing.sm },
-    setNum: { ...t.typography.bodyBold, color: t.colors.textSecondary, width: 16, paddingBottom: t.spacing.sm },
+    setNum: { ...t.typography.bodyBold, color: t.colors.textSecondary, width: 14, paddingBottom: t.spacing.sm },
     setField: { flex: 1, minWidth: 0 },
     setRemove: { padding: t.spacing.sm, paddingBottom: t.spacing.sm },
-    addSet: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: t.spacing.md },
+    addSet: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: t.spacing.sm },
     addSetText: { ...t.typography.caption, color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
     unclearMsg: { ...t.typography.body, color: t.colors.textPrimary, marginTop: t.spacing.sm },
     routeRow: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.lg },
     routeButton: { flex: 1 },
-    cta: { marginTop: t.spacing.xl },
+    hint: { ...t.typography.caption, color: t.colors.warning, textAlign: 'center', marginTop: t.spacing.sm },
+    cta: { marginTop: t.spacing.md },
   });
 }

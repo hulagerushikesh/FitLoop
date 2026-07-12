@@ -22,8 +22,8 @@ import {
 import ScreenContainer from '../../components/ScreenContainer';
 import { Card, Chip, CountUp, ProgressRing, SkeletonCard, useToast } from '../../components/ui';
 import VoiceLogButton from '../../components/voice/VoiceLogButton';
-import VoiceConfirmModal, { type VoiceWorkoutSaveInput } from '../../components/voice/VoiceConfirmModal';
-import type { VoiceLogResult } from '../../engine/voiceLogParsing';
+import VoiceConfirmModal, { type CommitItem } from '../../components/voice/VoiceConfirmModal';
+import type { VoiceBatch } from '../../engine/voiceLogParsing';
 import ProgressBar from '../../components/ProgressBar';
 import { loggingStreak } from '../../engine/analytics';
 import { Theme, useTheme, useThemedStyles } from '../../theme';
@@ -60,7 +60,7 @@ export default function HomeScreen({ navigation }: Props) {
   const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [library, setLibrary] = useState<{ id: string; name: string }[]>([]);
-  const [voiceResult, setVoiceResult] = useState<VoiceLogResult | null>(null);
+  const [voiceResult, setVoiceResult] = useState<VoiceBatch | null>(null);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [photoDoneToday, setPhotoDoneToday] = useState(false);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
@@ -120,43 +120,37 @@ export default function HomeScreen({ navigation }: Props) {
     setVoiceResult(null);
   };
 
-  const onVoiceResult = (result: VoiceLogResult) => {
+  const onVoiceResult = (result: VoiceBatch) => {
     setVoiceResult(result);
     setVoiceModalVisible(true);
   };
 
-  const onSaveFood = async (food: { name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number }) => {
+  // Persist every confirmed item from the batch — foods, ad-hoc workouts and
+  // activities together — then reload the dashboard.
+  const onVoiceCommit = async (items: CommitItem[]) => {
     if (!user) return;
-    await addFoodLog(user.id, {
-      name: food.name,
-      servings: 1,
-      calories: food.calories,
-      protein_g: food.protein_g,
-      carbs_g: food.carbs_g,
-      fat_g: food.fat_g,
-      meal_type: 'snack',
-      source: 'ai_text',
-      food_item_id: null,
-      photo_path: null,
-    });
+    for (const item of items) {
+      if (item.kind === 'food') {
+        await addFoodLog(user.id, {
+          name: item.name,
+          servings: 1,
+          calories: item.calories,
+          protein_g: item.protein_g,
+          carbs_g: item.carbs_g,
+          fat_g: item.fat_g,
+          meal_type: 'snack',
+          source: 'ai_text',
+          food_item_id: null,
+          photo_path: null,
+        });
+      } else if (item.kind === 'workout') {
+        await logAdhocWorkout(user.id, { exerciseId: item.exerciseId, exerciseName: item.exerciseName, sets: item.sets });
+      } else {
+        await logActivitySession(user.id, { activityName: item.activityName, estimatedCalories: item.estimatedCalories });
+      }
+    }
     closeVoice();
-    showToast('Food logged');
-    load();
-  };
-
-  const onSaveWorkout = async (input: VoiceWorkoutSaveInput) => {
-    if (!user) return;
-    await logAdhocWorkout(user.id, input);
-    closeVoice();
-    showToast(`Logged ${input.exerciseName}`);
-    load();
-  };
-
-  const onSaveActivity = async (activity: { activityName: string; durationMinutes: number | null; estimatedCalories: number | null }) => {
-    if (!user) return;
-    await logActivitySession(user.id, { ...activity, notes: null });
-    closeVoice();
-    showToast(`Logged ${activity.activityName}`);
+    showToast(`Logged ${items.length} ${items.length === 1 ? 'item' : 'items'}`);
     load();
   };
 
@@ -327,12 +321,11 @@ export default function HomeScreen({ navigation }: Props) {
 
       <VoiceConfirmModal
         visible={voiceModalVisible}
-        result={voiceResult}
+        batch={voiceResult}
         exercises={library}
+        supportedKinds={['food', 'workout', 'activity']}
+        onCommit={onVoiceCommit}
         onClose={closeVoice}
-        onSaveFood={onSaveFood}
-        onSaveWorkout={onSaveWorkout}
-        onSaveActivity={onSaveActivity}
         onRouteFood={(transcript) => {
           closeVoice();
           navigation.navigate('Nutrition', { screen: 'LogMeal', params: { mode: 'text', describe: transcript } });

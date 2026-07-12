@@ -1,118 +1,105 @@
 import {
-  normalizeVoiceResult,
+  normalizeVoiceBatch,
   activityToSessionFields,
   fuzzyMatchExercise,
   resolveMatchedExercise,
   toKg,
-  type VoiceWorkout,
 } from '../voiceLogParsing';
 
-describe('normalizeVoiceResult', () => {
-  it('reshapes a food payload and rounds macros', () => {
-    const r = normalizeVoiceResult({
-      type: 'food',
-      transcript: 'two eggs and toast',
-      food_name: '2 eggs and toast',
-      food_calories: 245.6,
-      food_protein_g: 18.2,
-      food_carbs_g: 20,
-      food_fat_g: 11.9,
-      food_confidence: 0.8,
-    });
-    expect(r.type).toBe('food');
-    if (r.type !== 'food') throw new Error('type');
-    expect(r.food).toEqual({
-      name: '2 eggs and toast',
-      calories: 246,
-      protein_g: 18,
-      carbs_g: 20,
-      fat_g: 12,
-      confidence: 0.8,
-    });
-  });
-
-  it('clamps confidence into 0..1 and floors negative macros at 0', () => {
-    const r = normalizeVoiceResult({
-      type: 'food',
-      transcript: 'x',
-      food_name: 'mystery',
-      food_calories: -50,
-      food_confidence: 5,
-    });
-    if (r.type !== 'food') throw new Error('type');
-    expect(r.food.calories).toBe(0);
-    expect(r.food.confidence).toBe(1);
-  });
-
-  it('expands workout sets and normalizes lb → kg', () => {
-    const r = normalizeVoiceResult({
-      type: 'workout',
-      transcript: 'bench press 3 by 8 at 135 pounds',
-      workout_exercise_name: 'Bench Press',
-      workout_matched_exercise_id: 'ex-1',
-      workout_sets: [
-        { weight: 135, reps: 8, unit: 'lb' },
-        { weight: 135, reps: 8, unit: 'lb' },
-        { weight: 135, reps: 8, unit: 'lb' },
+describe('normalizeVoiceBatch', () => {
+  it('reshapes multiple food items and rounds macros', () => {
+    const b = normalizeVoiceBatch({
+      transcript: 'two eggs and a banana',
+      items: [
+        { kind: 'food', food_name: '2 eggs', food_calories: 155.4, food_protein_g: 13, food_carbs_g: 1, food_fat_g: 11 },
+        { kind: 'food', food_name: 'banana', food_calories: 105, food_protein_g: 1.3, food_carbs_g: 27, food_fat_g: 0.4 },
       ],
     });
-    if (r.type !== 'workout') throw new Error('type');
-    expect(r.workout.sets).toHaveLength(3);
-    expect(r.workout.sets[0].reps).toBe(8);
-    expect(r.workout.sets[0].weightKg).toBeCloseTo(61.23, 1);
-    expect(r.workout.matchedExerciseId).toBe('ex-1');
+    expect(b.items).toHaveLength(2);
+    expect(b.items[0]).toEqual({ kind: 'food', name: '2 eggs', calories: 155, protein_g: 13, carbs_g: 1, fat_g: 11 });
+    expect(b.items[1].kind).toBe('food');
+    expect(b.message).toBeNull();
   });
 
-  it('keeps kg weights as-is and treats empty match id as null', () => {
-    const r = normalizeVoiceResult({
-      type: 'workout',
+  it('handles a mixed batch of food, workout, and activity', () => {
+    const b = normalizeVoiceBatch({
+      transcript: 'eggs, bench press, and a run',
+      items: [
+        { kind: 'food', food_name: 'eggs', food_calories: 150 },
+        {
+          kind: 'workout',
+          workout_exercise_name: 'Bench Press',
+          workout_matched_exercise_id: 'ex-1',
+          workout_sets: [
+            { weight: 135, reps: 8, unit: 'lb' },
+            { weight: 135, reps: 8, unit: 'lb' },
+          ],
+        },
+        { kind: 'activity', activity_name: 'Running', activity_duration_minutes: 25, activity_estimated_calories: 260 },
+      ],
+    });
+    expect(b.items.map((i) => i.kind)).toEqual(['food', 'workout', 'activity']);
+    const workout = b.items[1];
+    if (workout.kind !== 'workout') throw new Error('kind');
+    expect(workout.sets).toHaveLength(2);
+    expect(workout.sets[0].weightKg).toBeCloseTo(61.23, 1);
+    expect(workout.matchedExerciseId).toBe('ex-1');
+  });
+
+  it('expands and keeps kg workout sets, empty match id → null', () => {
+    const b = normalizeVoiceBatch({
       transcript: 'squat',
-      workout_exercise_name: 'Squat',
-      workout_matched_exercise_id: '',
-      workout_sets: [{ weight: 100, reps: 5, unit: 'kg' }],
+      items: [
+        {
+          kind: 'workout',
+          workout_exercise_name: 'Squat',
+          workout_matched_exercise_id: '',
+          workout_sets: [{ weight: 100, reps: 5, unit: 'kg' }],
+        },
+      ],
     });
-    if (r.type !== 'workout') throw new Error('type');
-    expect(r.workout.sets[0].weightKg).toBe(100);
-    expect(r.workout.matchedExerciseId).toBeNull();
+    const w = b.items[0];
+    if (w.kind !== 'workout') throw new Error('kind');
+    expect(w.sets[0].weightKg).toBe(100);
+    expect(w.matchedExerciseId).toBeNull();
   });
 
-  it('parses an activity result', () => {
-    const r = normalizeVoiceResult({
-      type: 'activity',
-      transcript: 'I ran for 25 minutes',
-      activity_name: 'Running',
-      activity_duration_minutes: 25,
-      activity_estimated_calories: 260,
+  it('drops invalid items but keeps valid ones', () => {
+    const b = normalizeVoiceBatch({
+      transcript: 'x',
+      items: [
+        { kind: 'food' }, // no name → dropped
+        { kind: 'food', food_name: 'toast', food_calories: 90 },
+        { kind: 'workout' }, // no name/sets → dropped
+        { kind: 'nonsense', foo: 1 }, // unknown kind → dropped
+      ],
     });
-    if (r.type !== 'activity') throw new Error('type');
-    expect(r.activity.activityName).toBe('Running');
-    expect(r.activity.durationMinutes).toBe(25);
-    expect(r.activity.estimatedCalories).toBe(260);
+    expect(b.items).toHaveLength(1);
+    expect(b.items[0].kind).toBe('food');
   });
 
-  it('downgrades a food payload with no name to unclear', () => {
-    const r = normalizeVoiceResult({ type: 'food', transcript: 'mumble', food_calories: 100 });
-    expect(r.type).toBe('unclear');
-    if (r.type !== 'unclear') throw new Error('type');
-    expect(r.transcript).toBe('mumble');
-    expect(r.message.length).toBeGreaterThan(0);
+  it('reports an unclear message when no items survive', () => {
+    const b = normalizeVoiceBatch({ transcript: 'weather today', items: [], unclear_message: 'Not a log.' });
+    expect(b.items).toHaveLength(0);
+    expect(b.message).toBe('Not a log.');
+    expect(b.transcript).toBe('weather today');
   });
 
-  it('downgrades a workout payload with neither name nor sets to unclear', () => {
-    const r = normalizeVoiceResult({ type: 'workout', transcript: 'uh' });
-    expect(r.type).toBe('unclear');
+  it('supplies a default message and tolerates malformed payloads', () => {
+    expect(normalizeVoiceBatch({ transcript: 'x', items: [] }).message).toMatch(/./);
+    expect(normalizeVoiceBatch(null).items).toEqual([]);
+    expect(normalizeVoiceBatch('nope').message).toMatch(/./);
+    expect(normalizeVoiceBatch(undefined).items).toEqual([]);
   });
 
-  it('passes through an explicit unclear message', () => {
-    const r = normalizeVoiceResult({ type: 'unclear', transcript: 'weather', message: 'Not a log.' });
-    if (r.type !== 'unclear') throw new Error('type');
-    expect(r.message).toBe('Not a log.');
-  });
-
-  it('handles a totally malformed payload', () => {
-    expect(normalizeVoiceResult(null).type).toBe('unclear');
-    expect(normalizeVoiceResult(undefined).type).toBe('unclear');
-    expect(normalizeVoiceResult('nope').type).toBe('unclear');
+  it('floors negative macros at zero', () => {
+    const b = normalizeVoiceBatch({
+      transcript: 'x',
+      items: [{ kind: 'food', food_name: 'mystery', food_calories: -50 }],
+    });
+    const f = b.items[0];
+    if (f.kind !== 'food') throw new Error('kind');
+    expect(f.calories).toBe(0);
   });
 });
 
@@ -128,10 +115,7 @@ describe('toKg', () => {
 
 describe('activityToSessionFields', () => {
   it('maps an activity into workout_sessions columns', () => {
-    const fields = activityToSessionFields(
-      { activityName: 'Evening walk', durationMinutes: 30, estimatedCalories: 120, notes: null },
-      '2026-07-11'
-    );
+    const fields = activityToSessionFields({ activityName: 'Evening walk', estimatedCalories: 120 }, '2026-07-11');
     expect(fields).toEqual({
       name: 'Evening walk',
       activity_name: 'Evening walk',
@@ -171,22 +155,18 @@ describe('resolveMatchedExercise', () => {
   ];
 
   it('prefers a valid server-provided match id', () => {
-    const w: VoiceWorkout = { exerciseName: 'squat', matchedExerciseId: '1', sets: [], notes: null };
-    expect(resolveMatchedExercise(w, library)?.id).toBe('1');
+    expect(resolveMatchedExercise({ exerciseName: 'squat', matchedExerciseId: '1' }, library)?.id).toBe('1');
   });
 
   it('falls back to fuzzy match when the server id is unknown', () => {
-    const w: VoiceWorkout = { exerciseName: 'bench press', matchedExerciseId: 'ghost', sets: [], notes: null };
-    expect(resolveMatchedExercise(w, library)?.id).toBe('1');
+    expect(resolveMatchedExercise({ exerciseName: 'bench press', matchedExerciseId: 'ghost' }, library)?.id).toBe('1');
   });
 
   it('fuzzy-matches when no server id is given', () => {
-    const w: VoiceWorkout = { exerciseName: 'squat', matchedExerciseId: null, sets: [], notes: null };
-    expect(resolveMatchedExercise(w, library)?.id).toBe('2');
+    expect(resolveMatchedExercise({ exerciseName: 'squat', matchedExerciseId: null }, library)?.id).toBe('2');
   });
 
   it('returns null when nothing matches', () => {
-    const w: VoiceWorkout = { exerciseName: 'deadlift', matchedExerciseId: null, sets: [], notes: null };
-    expect(resolveMatchedExercise(w, library)).toBeNull();
+    expect(resolveMatchedExercise({ exerciseName: 'deadlift', matchedExerciseId: null }, library)).toBeNull();
   });
 });

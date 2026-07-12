@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { STANDARD_PLAN } from '../constants/workoutTemplates';
 import { estimateSessionCalories } from '../engine/calorieBurn';
-import { activityToSessionFields, type ActivitySessionFields, type VoiceActivity } from '../engine/voiceLogParsing';
+import { activityToSessionFields, type ActivitySessionFields } from '../engine/voiceLogParsing';
 import type { Exercise, MuscleGroup, MuscleGroupFatigue, SetType, SplitType, Workout, WorkoutExercise, WorkoutLog, WorkoutSession } from '../types/database';
 
 function todayUtc(): string {
@@ -269,7 +269,10 @@ export async function logSet(
  * workout_session with no linked routine — flagged via activity_name/type so
  * the calendar and analytics can tell it apart from a lifted routine.
  */
-export async function logActivitySession(userId: string, activity: VoiceActivity): Promise<void> {
+export async function logActivitySession(
+  userId: string,
+  activity: { activityName: string; estimatedCalories: number | null }
+): Promise<void> {
   const fields: ActivitySessionFields = activityToSessionFields(activity, todayUtc());
   const { error } = await supabase.from('workout_sessions').insert({
     user_id: userId,

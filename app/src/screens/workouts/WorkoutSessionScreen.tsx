@@ -41,8 +41,8 @@ import { successHaptic } from '../../utils/haptics';
 import RestTimer from '../../components/RestTimer';
 import PlateCalculatorSheet from '../../components/PlateCalculatorSheet';
 import VoiceLogButton from '../../components/voice/VoiceLogButton';
-import VoiceConfirmModal, { type VoiceWorkoutSaveInput } from '../../components/voice/VoiceConfirmModal';
-import type { VoiceLogResult } from '../../engine/voiceLogParsing';
+import VoiceConfirmModal, { type CommitItem } from '../../components/voice/VoiceConfirmModal';
+import type { VoiceBatch } from '../../engine/voiceLogParsing';
 import { Badge, Button, Card, Chip, NumberInput, useToast } from '../../components/ui';
 import ScreenContainer from '../../components/ScreenContainer';
 import { DEFAULT_REST_SECONDS } from '../../constants/workoutTemplates';
@@ -308,7 +308,7 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [library, setLibrary] = useState<{ id: string; name: string }[]>([]);
-  const [voiceResult, setVoiceResult] = useState<VoiceLogResult | null>(null);
+  const [voiceResult, setVoiceResult] = useState<VoiceBatch | null>(null);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
 
   useEffect(() => {
@@ -413,29 +413,28 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
     }
   };
 
-  const onVoiceResult = (result: VoiceLogResult) => {
-    if (result.type === 'workout') {
-      setVoiceResult(result);
+  const onVoiceResult = (batch: VoiceBatch) => {
+    const hasWorkout = batch.items.some((i) => i.kind === 'workout');
+    if (hasWorkout) {
+      setVoiceResult(batch);
       setVoiceModalVisible(true);
-    } else if (result.type === 'unclear') {
-      showToast(result.message, 'info');
     } else {
-      showToast(`That sounded like ${result.type} — log it from the ${result.type === 'food' ? 'Nutrition' : 'Home'} tab.`, 'info');
+      showToast(batch.message ?? "Didn't catch a workout — try naming the exercise, sets and weight.", 'info');
     }
   };
 
-  const onVoiceWorkoutSave = async (input: VoiceWorkoutSaveInput) => {
-    for (const set of input.sets) {
-      await onLogSet(input.exerciseId, {
-        weight_kg: set.weightKg,
-        reps: set.reps,
-        rpe: null,
-        set_type: 'normal',
-      });
+  const onVoiceCommit = async (items: CommitItem[]) => {
+    let sets = 0;
+    for (const item of items) {
+      if (item.kind !== 'workout') continue;
+      for (const set of item.sets) {
+        await onLogSet(item.exerciseId, { weight_kg: set.weightKg, reps: set.reps, rpe: null, set_type: 'normal' });
+        sets += 1;
+      }
     }
     setVoiceModalVisible(false);
     setVoiceResult(null);
-    showToast(`Logged ${input.sets.length} set${input.sets.length === 1 ? '' : 's'} of ${input.exerciseName}`);
+    showToast(`Logged ${sets} set${sets === 1 ? '' : 's'} across ${items.length} exercise${items.length === 1 ? '' : 's'}`);
   };
 
   const totalSetsLogged = useMemo(
@@ -527,13 +526,14 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
 
       <VoiceConfirmModal
         visible={voiceModalVisible}
-        result={voiceResult}
+        batch={voiceResult}
         exercises={library}
+        supportedKinds={['workout']}
+        onCommit={onVoiceCommit}
         onClose={() => {
           setVoiceModalVisible(false);
           setVoiceResult(null);
         }}
-        onSaveWorkout={onVoiceWorkoutSave}
       />
     </ScreenContainer>
   );

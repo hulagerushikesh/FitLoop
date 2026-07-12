@@ -1,21 +1,10 @@
 // Pure helpers for the unified voice-logging feature. The parse-voice-log edge
-// function returns a flattened JSON blob (see supabase/functions/parse-voice-log);
-// this module reshapes it into a typed discriminated union, maps an "activity"
-// result into the fields a workout_sessions insert needs, and fuzzy-matches a
-// spoken exercise name against the user's library as a client-side fallback
-// when the server didn't return a match. Framework-free and unit-tested, like
-// the other engine modules.
-
-export type VoiceLogType = 'food' | 'workout' | 'activity' | 'unclear';
-
-export interface VoiceFood {
-  name: string;
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  confidence: number;
-}
+// function returns a flattened batch — a transcript plus an ARRAY of items
+// (multiple foods/workouts/activities in one utterance). This module reshapes
+// that into a typed list, maps an "activity" item into the fields a
+// workout_sessions insert needs, and fuzzy-matches a spoken exercise name
+// against the user's library as a client-side fallback when the server didn't
+// return a match. Framework-free and unit-tested, like the other engine modules.
 
 export interface VoiceWorkoutSet {
   /** Normalized to kilograms (null when bodyweight / not spoken). */
@@ -23,7 +12,17 @@ export interface VoiceWorkoutSet {
   reps: number | null;
 }
 
-export interface VoiceWorkout {
+export interface VoiceFoodItem {
+  kind: 'food';
+  name: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+}
+
+export interface VoiceWorkoutItem {
+  kind: 'workout';
   exerciseName: string;
   /** Server's fuzzy match against the library, or null. */
   matchedExerciseId: string | null;
@@ -31,18 +30,23 @@ export interface VoiceWorkout {
   notes: string | null;
 }
 
-export interface VoiceActivity {
+export interface VoiceActivityItem {
+  kind: 'activity';
   activityName: string;
   durationMinutes: number | null;
   estimatedCalories: number | null;
   notes: string | null;
 }
 
-export type VoiceLogResult =
-  | { type: 'food'; transcript: string; food: VoiceFood }
-  | { type: 'workout'; transcript: string; workout: VoiceWorkout }
-  | { type: 'activity'; transcript: string; activity: VoiceActivity }
-  | { type: 'unclear'; transcript: string; message: string };
+export type VoiceItem = VoiceFoodItem | VoiceWorkoutItem | VoiceActivityItem;
+export type VoiceKind = VoiceItem['kind'];
+
+export interface VoiceBatch {
+  transcript: string;
+  items: VoiceItem[];
+  /** Set only when items is empty — why nothing could be extracted. */
+  message: string | null;
+}
 
 const LB_TO_KG = 0.45359237;
 
@@ -82,76 +86,68 @@ function normalizeSets(raw: unknown): VoiceWorkoutSet[] {
     .filter((s) => s.reps != null || s.weightKg != null);
 }
 
-/**
- * Reshapes the flattened edge-function payload into a typed result. Any payload
- * that doesn't carry enough data for its declared type is downgraded to
- * "unclear" so the UI always has a safe, transcript-bearing fallback rather
- * than a half-empty confirmation form.
- */
-export function normalizeVoiceResult(raw: unknown): VoiceLogResult {
+/** Reshapes one raw item; returns null if it lacks the minimum data for its kind. */
+function normalizeItem(raw: unknown): VoiceItem | null {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const transcript = str(r.transcript);
-  const type = r.type as VoiceLogType;
+  const kind = r.kind;
 
-  if (type === 'food') {
+  if (kind === 'food') {
     const name = str(r.food_name);
-    if (name) {
-      return {
-        type: 'food',
-        transcript,
-        food: {
-          name,
-          calories: nonNeg(r.food_calories),
-          protein_g: nonNeg(r.food_protein_g),
-          carbs_g: nonNeg(r.food_carbs_g),
-          fat_g: nonNeg(r.food_fat_g),
-          confidence: Math.min(1, Math.max(0, num(r.food_confidence, 0.5))),
-        },
-      };
-    }
+    if (!name) return null;
+    return {
+      kind: 'food',
+      name,
+      calories: nonNeg(r.food_calories),
+      protein_g: nonNeg(r.food_protein_g),
+      carbs_g: nonNeg(r.food_carbs_g),
+      fat_g: nonNeg(r.food_fat_g),
+    };
   }
 
-  if (type === 'workout') {
+  if (kind === 'workout') {
     const exerciseName = str(r.workout_exercise_name);
     const sets = normalizeSets(r.workout_sets);
-    if (exerciseName || sets.length > 0) {
-      const matched = str(r.workout_matched_exercise_id);
-      return {
-        type: 'workout',
-        transcript,
-        workout: {
-          exerciseName,
-          matchedExerciseId: matched || null,
-          sets,
-          notes: str(r.workout_notes) || null,
-        },
-      };
-    }
+    if (!exerciseName && sets.length === 0) return null;
+    const matched = str(r.workout_matched_exercise_id);
+    return {
+      kind: 'workout',
+      exerciseName,
+      matchedExerciseId: matched || null,
+      sets,
+      notes: str(r.workout_notes) || null,
+    };
   }
 
-  if (type === 'activity') {
+  if (kind === 'activity') {
     const activityName = str(r.activity_name);
-    if (activityName) {
-      const duration = num(r.activity_duration_minutes, 0);
-      const calories = num(r.activity_estimated_calories, 0);
-      return {
-        type: 'activity',
-        transcript,
-        activity: {
-          activityName,
-          durationMinutes: duration > 0 ? Math.round(duration) : null,
-          estimatedCalories: calories > 0 ? Math.round(calories) : null,
-          notes: str(r.activity_notes) || null,
-        },
-      };
-    }
+    if (!activityName) return null;
+    const duration = num(r.activity_duration_minutes, 0);
+    const calories = num(r.activity_estimated_calories, 0);
+    return {
+      kind: 'activity',
+      activityName,
+      durationMinutes: duration > 0 ? Math.round(duration) : null,
+      estimatedCalories: calories > 0 ? Math.round(calories) : null,
+      notes: str(r.activity_notes) || null,
+    };
   }
 
-  return {
-    type: 'unclear',
-    transcript,
-    message: str(r.message) || "Couldn't tell whether that was food or a workout.",
-  };
+  return null;
+}
+
+/**
+ * Reshapes the flattened edge-function payload into a typed batch. Invalid items
+ * are dropped; when nothing survives, `message` carries a transcript-bearing
+ * explanation so the UI always has a safe fallback.
+ */
+export function normalizeVoiceBatch(raw: unknown): VoiceBatch {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const transcript = str(r.transcript);
+  const rawItems = Array.isArray(r.items) ? r.items : [];
+  const items = rawItems.map(normalizeItem).filter((i): i is VoiceItem => i !== null);
+  const message =
+    items.length === 0 ? str(r.unclear_message) || "Couldn't tell what to log — try again." : null;
+  return { transcript, items, message };
 }
 
 export interface ActivitySessionFields {
@@ -163,13 +159,13 @@ export interface ActivitySessionFields {
 }
 
 /**
- * Maps an activity result into the columns a workout_sessions row needs. An
+ * Maps an activity item into the columns a workout_sessions row needs. An
  * activity is a completed session with no linked routine (workout_id stays
  * null) — it's flagged via activity_name/activity_type so the calendar and
  * analytics can tell it apart from a lifted routine.
  */
 export function activityToSessionFields(
-  activity: VoiceActivity,
+  activity: { activityName: string; estimatedCalories: number | null },
   sessionDate: string
 ): ActivitySessionFields {
   return {
@@ -225,12 +221,12 @@ export function fuzzyMatchExercise<T extends { id: string; name: string }>(
 }
 
 /**
- * Resolves the exercise a workout result should pre-select: the server's match
+ * Resolves the exercise a workout item should pre-select: the server's match
  * when it points at a real library entry, otherwise a client-side fuzzy match
  * on the spoken name. Null means "ask the user to pick".
  */
 export function resolveMatchedExercise<T extends { id: string; name: string }>(
-  workout: VoiceWorkout,
+  workout: { exerciseName: string; matchedExerciseId: string | null },
   library: T[]
 ): T | null {
   if (workout.matchedExerciseId) {

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { retryWithBackoff } from '../utils/retry';
 import { enforceRateLimit, RateLimitError } from './aiMeal';
-import { normalizeVoiceResult, type VoiceLogResult } from '../engine/voiceLogParsing';
+import { normalizeVoiceBatch, type VoiceBatch } from '../engine/voiceLogParsing';
 
 export type VoiceScope = 'food' | 'workout' | 'auto';
 
@@ -9,6 +9,8 @@ interface ParseVoiceResponse {
   result?: Record<string, unknown>;
   error?: string;
 }
+
+export type { VoiceBatch } from '../engine/voiceLogParsing';
 
 // Hard ceiling on how long we wait for the edge function before giving up, so a
 // stuck request can't leave the mic spinner up forever. Gemini audio calls are
@@ -49,7 +51,7 @@ export async function parseVoiceLog(
   mimeType: string,
   scope: VoiceScope,
   exerciseLibrary: { id: string; name: string }[]
-): Promise<VoiceLogResult> {
+): Promise<VoiceBatch> {
   await enforceRateLimit();
 
   const raw = await withTimeout(
@@ -67,5 +69,5 @@ export async function parseVoiceLog(
     REQUEST_TIMEOUT_MS
   );
 
-  return normalizeVoiceResult(raw);
+  return normalizeVoiceBatch(raw);
 }
