@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { STANDARD_PLAN } from '../constants/workoutTemplates';
 import { estimateSessionCalories } from '../engine/calorieBurn';
+import { generateWeeklyPlan, type WeeklyPlanInput } from '../engine/weeklyPlan';
 import { activityToSessionFields, type ActivitySessionFields } from '../engine/voiceLogParsing';
 import type { Exercise, MuscleGroup, MuscleGroupFatigue, SetType, SplitType, Workout, WorkoutExercise, WorkoutLog, WorkoutSession } from '../types/database';
 
@@ -174,6 +175,63 @@ export async function seedStandardPlan(userId: string): Promise<void> {
       split_type: 'custom',
       day_of_week: day.dayOfWeek,
       exercises,
+    });
+  }
+}
+
+/**
+ * Round-robins across a day's muscle groups, taking each group's top exercises
+ * (compounds first, since the library is sort_order-ranked) so a session is
+ * balanced across everything the day targets, up to `maxCount`.
+ */
+function pickExercisesForDay(
+  byGroup: Map<MuscleGroup, Exercise[]>,
+  groups: MuscleGroup[],
+  maxCount: number
+): Exercise[] {
+  const pools = groups.map((g) => [...(byGroup.get(g) ?? [])]);
+  const picks: Exercise[] = [];
+  let i = 0;
+  while (picks.length < maxCount && pools.some((p) => p.length > 0)) {
+    const pool = pools[i % pools.length];
+    const ex = pool.shift();
+    if (ex && !picks.some((p) => p.id === ex.id)) picks.push(ex);
+    i += 1;
+  }
+  return picks;
+}
+
+/**
+ * Creates a PERSONALIZED weekly plan for a user from their profile (see
+ * engine/weeklyPlan): activity level sets the number of training days, that
+ * sets the split, and the goal sets the set/rep focus. Exercises are resolved
+ * live from the library per day, so it stays correct as the library grows.
+ * Deterministic — the same profile always produces the same plan.
+ */
+export async function seedPersonalizedPlan(userId: string, input: WeeklyPlanInput): Promise<void> {
+  const plan = generateWeeklyPlan(input);
+  const library = await fetchExerciseLibrary(userId); // ordered by muscle_group, sort_order
+  const byGroup = new Map<MuscleGroup, Exercise[]>();
+  for (const e of library) {
+    const arr = byGroup.get(e.muscle_group) ?? [];
+    arr.push(e);
+    byGroup.set(e.muscle_group, arr);
+  }
+
+  for (const day of plan) {
+    const picks = pickExercisesForDay(byGroup, day.muscleGroups, 6);
+    if (picks.length === 0) continue;
+    await createRoutine(userId, {
+      name: day.name,
+      split_type: day.splitType,
+      day_of_week: day.dayOfWeek,
+      exercises: picks.map((ex, index) => ({
+        exercise_id: ex.id,
+        order_index: index,
+        target_sets: day.targetSets,
+        target_reps: day.targetReps,
+        superset_group: null,
+      })),
     });
   }
 }

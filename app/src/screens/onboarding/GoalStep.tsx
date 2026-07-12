@@ -12,7 +12,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
 import { completeOnboarding } from '../../services/profile';
 import { insertGoal } from '../../services/goals';
-import { seedStandardPlan } from '../../services/workouts';
+import { seedPersonalizedPlan } from '../../services/workouts';
 import { computeInitialTargets } from '../../engine/calorieEngine';
 import { GOAL_OPTIONS, RATE_BOUNDS, formatRate } from '../../constants/profileOptions';
 import { Theme, useTheme, useThemedStyles } from '../../theme';
@@ -76,11 +76,16 @@ export default function GoalStep(_props: Props) {
         reason: 'Your initial target, based on your profile and goal.',
       });
 
-      // A starter workout plan is a nice-to-have, not a blocker — if the
-      // exercise library isn't seeded yet or this fails, still let the
-      // user reach the app; they can build routines manually.
+      // A personalized starter plan (built from their goal + activity level) is
+      // a nice-to-have, not a blocker — if the exercise library isn't seeded yet
+      // or this fails, still let the user reach the app; they can build routines
+      // manually.
       try {
-        await seedStandardPlan(user.id);
+        await seedPersonalizedPlan(user.id, {
+          goalType: draft.goal_type!,
+          activityLevel: draft.activity_level!,
+          sex: draft.sex!,
+        });
       } catch {
         // ignore
       }
