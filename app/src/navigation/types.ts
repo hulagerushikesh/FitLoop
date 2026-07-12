@@ -48,6 +48,7 @@ export type ProfileStackParamList = {
   ProfileMain: undefined;
   CalendarMain: undefined;
   AnalyticsMain: undefined;
+  ProgressGallery: undefined;
   EditProfile: undefined;
   Account: undefined;
   ChangePassword: undefined;

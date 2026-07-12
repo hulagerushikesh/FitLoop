@@ -5,6 +5,7 @@ import {
   Calendar,
   Camera,
   Database,
+  Images,
   Info,
   Settings2,
   UserCog,
@@ -91,6 +92,13 @@ export default function ProfileScreen({ navigation }: Props) {
           <MenuRow icon={Calendar} label="Calendar" onPress={() => navigation.navigate('CalendarMain')} />
           <MenuDivider />
           <MenuRow icon={BarChart3} label="Analytics" onPress={() => navigation.navigate('AnalyticsMain')} />
+          <MenuDivider />
+          <MenuRow
+            icon={Images}
+            label="Progress photos"
+            detail="Your daily photos by date"
+            onPress={() => navigation.navigate('ProgressGallery')}
+          />
         </Card>
 
         <Text style={styles.sectionTitle}>Settings</Text>

@@ -4,6 +4,7 @@ import type { ProfileStackParamList } from './types';
 import ProfileScreen from '../screens/profile/ProfileScreen';
 import CalendarScreen from '../screens/calendar/CalendarScreen';
 import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
+import ProgressGalleryScreen from '../screens/profile/ProgressGalleryScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import AccountScreen from '../screens/profile/AccountScreen';
 import ChangePasswordScreen from '../screens/profile/ChangePasswordScreen';
@@ -22,6 +23,7 @@ export default function ProfileStackNavigator() {
       <Stack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: 'Profile' }} />
       <Stack.Screen name="CalendarMain" component={CalendarScreen} options={{ title: 'Calendar' }} />
       <Stack.Screen name="AnalyticsMain" component={AnalyticsScreen} options={{ title: 'Analytics' }} />
+      <Stack.Screen name="ProgressGallery" component={ProgressGalleryScreen} options={{ title: 'Progress Photos' }} />
       <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ title: 'Edit Profile' }} />
       <Stack.Screen name="Account" component={AccountScreen} options={{ title: 'Account' }} />
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ title: 'Change Password' }} />

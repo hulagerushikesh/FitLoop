@@ -184,6 +184,33 @@ export async function signedProgressPhotoUrl(storagePath: string): Promise<strin
   return data?.signedUrl ?? null;
 }
 
+export interface ProgressPhotoEntry {
+  id: string;
+  taken_at: string;
+  storage_path: string;
+  signedUrl: string | null;
+}
+
+/**
+ * All of the user's progress photos, newest first, each with a batched signed
+ * URL (the bucket is private). Feeds the datewise gallery in Profile.
+ */
+export async function fetchProgressGallery(userId: string): Promise<ProgressPhotoEntry[]> {
+  const { data, error } = await supabase
+    .from('progress_photos')
+    .select('id, taken_at, storage_path')
+    .eq('user_id', userId)
+    .order('taken_at', { ascending: false });
+  if (error) throw error;
+  const rows = (data ?? []) as { id: string; taken_at: string; storage_path: string }[];
+  const paths = rows.map((r) => r.storage_path);
+  const { data: signed } = paths.length
+    ? await supabase.storage.from(PROGRESS_BUCKET).createSignedUrls(paths, 3600)
+    : { data: [] };
+  const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
+  return rows.map((r) => ({ ...r, signedUrl: urlByPath.get(r.storage_path) ?? null }));
+}
+
 /** Map of taken_at (YYYY-MM-DD) → storage_path within an inclusive date range. */
 export async function fetchProgressPhotoMap(
   userId: string,
