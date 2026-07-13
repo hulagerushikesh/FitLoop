@@ -37,13 +37,41 @@ export function trainingDaysPerWeek(activityLevel: ActivityLevel): number {
   return DAYS_BY_ACTIVITY[activityLevel];
 }
 
-// Which split to run for a given number of training days. 3→PPL, 4→U/L twice,
-// 5→PPL+U/L, 6→PPL twice.
-const SPLIT_SEQUENCE: Record<number, SplitType[]> = {
-  3: ['push', 'pull', 'legs'],
-  4: ['upper', 'lower', 'upper', 'lower'],
-  5: ['push', 'pull', 'legs', 'upper', 'lower'],
-  6: ['push', 'pull', 'legs', 'push', 'pull', 'legs'],
+// A body-part ("bro") split — the way most people actually train, named by
+// the muscles worked (e.g. "Back & Biceps"), NOT abstract "Upper/Push". More
+// training days unlock a more spread-out split.
+interface DayTemplate {
+  name: string;
+  muscleGroups: MuscleGroup[];
+}
+
+const DAY_TEMPLATES: Record<number, DayTemplate[]> = {
+  3: [
+    { name: 'Chest & Triceps', muscleGroups: ['chest', 'arms'] },
+    { name: 'Back & Biceps', muscleGroups: ['back', 'arms', 'forearms'] },
+    { name: 'Legs & Shoulders', muscleGroups: ['legs', 'shoulders', 'core'] },
+  ],
+  4: [
+    { name: 'Chest & Triceps', muscleGroups: ['chest', 'arms'] },
+    { name: 'Back & Biceps', muscleGroups: ['back', 'arms', 'forearms'] },
+    { name: 'Shoulders & Abs', muscleGroups: ['shoulders', 'core'] },
+    { name: 'Legs', muscleGroups: ['legs', 'core'] },
+  ],
+  5: [
+    { name: 'Chest & Triceps', muscleGroups: ['chest', 'arms'] },
+    { name: 'Back & Biceps', muscleGroups: ['back', 'arms', 'forearms'] },
+    { name: 'Shoulders', muscleGroups: ['shoulders', 'core'] },
+    { name: 'Legs', muscleGroups: ['legs', 'core'] },
+    { name: 'Arms & Abs', muscleGroups: ['arms', 'forearms', 'core'] },
+  ],
+  6: [
+    { name: 'Chest & Triceps', muscleGroups: ['chest', 'arms'] },
+    { name: 'Back & Biceps', muscleGroups: ['back', 'arms', 'forearms'] },
+    { name: 'Shoulders', muscleGroups: ['shoulders', 'core'] },
+    { name: 'Legs', muscleGroups: ['legs', 'core'] },
+    { name: 'Arms', muscleGroups: ['arms', 'forearms'] },
+    { name: 'Full Body & Cardio', muscleGroups: ['full_body', 'cardio'] },
+  ],
 };
 
 // Weekday assignment (0=Sun…6=Sat) that spreads rest days sensibly.
@@ -54,21 +82,6 @@ const WEEKDAYS_BY_COUNT: Record<number, number[]> = {
   6: [1, 2, 3, 4, 5, 6], // Mon–Sat
 };
 
-interface SplitMeta {
-  name: string;
-  muscleGroups: MuscleGroup[];
-}
-
-const SPLIT_META: Record<SplitType, SplitMeta> = {
-  push: { name: 'Push', muscleGroups: ['chest', 'shoulders', 'arms'] },
-  pull: { name: 'Pull', muscleGroups: ['back', 'arms', 'forearms'] },
-  legs: { name: 'Legs', muscleGroups: ['legs', 'core'] },
-  upper: { name: 'Upper Body', muscleGroups: ['chest', 'back', 'shoulders', 'arms'] },
-  lower: { name: 'Lower Body', muscleGroups: ['legs', 'core'] },
-  full_body: { name: 'Full Body', muscleGroups: ['chest', 'back', 'legs', 'shoulders'] },
-  custom: { name: 'Custom', muscleGroups: [] },
-};
-
 // Set/rep scheme by goal.
 const FOCUS_BY_GOAL: Record<GoalType, { focus: TrainingFocus; sets: number; reps: number }> = {
   muscle_gain: { focus: 'hypertrophy', sets: 4, reps: 10 },
@@ -77,36 +90,26 @@ const FOCUS_BY_GOAL: Record<GoalType, { focus: TrainingFocus; sets: number; reps
 };
 
 /**
- * Builds a personalized week. Cardio is woven into leg/lower days for fat-loss
- * goals (where conditioning matters most). Repeated splits get an A/B suffix so
- * each day reads distinctly.
+ * Builds a personalized week as a body-part split with muscle-named days.
+ * Cardio is woven into the leg day for fat-loss goals (where conditioning
+ * matters most). This is only a STARTING plan — the user can freely edit,
+ * rename, reschedule, or delete any day afterward.
  */
 export function generateWeeklyPlan(input: WeeklyPlanInput): PlanDay[] {
   const days = trainingDaysPerWeek(input.activityLevel);
-  const splits = SPLIT_SEQUENCE[days] ?? SPLIT_SEQUENCE[3];
+  const templates = DAY_TEMPLATES[days] ?? DAY_TEMPLATES[3];
   const weekdays = WEEKDAYS_BY_COUNT[days] ?? WEEKDAYS_BY_COUNT[3];
   const { focus, sets, reps } = FOCUS_BY_GOAL[input.goalType];
 
-  const seen = new Map<SplitType, number>();
-
-  return splits.map((split, i) => {
-    const meta = SPLIT_META[split];
-    const occurrence = (seen.get(split) ?? 0) + 1;
-    seen.set(split, occurrence);
-
-    const groups = [...meta.muscleGroups];
-    // Fat-loss: add conditioning to lower-body days for extra calorie burn.
-    if (input.goalType === 'fat_loss' && (split === 'legs' || split === 'lower') && !groups.includes('cardio')) {
+  return templates.map((tpl, i) => {
+    const groups = [...tpl.muscleGroups];
+    if (input.goalType === 'fat_loss' && groups.includes('legs') && !groups.includes('cardio')) {
       groups.push('cardio');
     }
-
-    const total = splits.filter((s) => s === split).length;
-    const name = total > 1 ? `${meta.name} ${occurrence === 1 ? 'A' : 'B'}` : meta.name;
-
     return {
-      name,
+      name: tpl.name,
       dayOfWeek: weekdays[i],
-      splitType: split,
+      splitType: 'custom' as SplitType,
       muscleGroups: groups,
       targetSets: sets,
       targetReps: reps,

@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Check, ChevronRight, Plus, Sparkles } from 'lucide-react-native';
+import { Check, ChevronRight, Dumbbell, Plus, Sparkles } from 'lucide-react-native';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
@@ -169,6 +169,13 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
           ) : null}
         </Card>
 
+        {/* ---- Browse the full exercise list ---- */}
+        <Pressable style={styles.libraryButton} onPress={() => navigation.navigate('ExerciseLibrary', undefined)}>
+          <Dumbbell size={18} color={t.colors.accentEmphasis} />
+          <Text style={styles.libraryButtonText}>Browse all exercises</Text>
+          <ChevronRight size={16} color={t.colors.textTertiary} style={styles.libraryChevron} />
+        </Pressable>
+
         {/* ---- Weekly schedule ---- */}
         <Text style={styles.sectionTitle}>This week</Text>
         <Card style={styles.weekCard}>
@@ -194,6 +201,9 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
             );
           })}
         </Card>
+        {routines.length > 0 ? (
+          <Text style={styles.editHint}>Tap any day to edit it, swap exercises, or reschedule — nothing's locked in.</Text>
+        ) : null}
 
         {routines.length === 0 ? (
           <Button
@@ -277,6 +287,21 @@ function createStyles(t: Theme) {
     chooseRowActive: {},
     chooseName: { ...t.typography.body, color: t.colors.textPrimary },
     sectionTitle: { ...t.typography.label, color: t.colors.textSecondary, textTransform: 'uppercase', marginBottom: t.spacing.sm },
+    libraryButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.sm,
+      backgroundColor: t.colors.surface,
+      borderWidth: 1,
+      borderColor: t.colors.border,
+      borderRadius: t.radii.lg,
+      paddingVertical: t.spacing.md,
+      paddingHorizontal: t.spacing.lg,
+      marginBottom: t.spacing.xl,
+    },
+    libraryButtonText: { ...t.typography.bodyBold, color: t.colors.textPrimary, flex: 1 },
+    libraryChevron: {},
+    editHint: { ...t.typography.caption, color: t.colors.textTertiary, marginBottom: t.spacing.lg },
     weekCard: { padding: 0, marginBottom: t.spacing.lg, overflow: 'hidden' },
     weekRow: {
       flexDirection: 'row',

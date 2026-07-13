@@ -15,17 +15,22 @@ describe('generateWeeklyPlan', () => {
     expect(generateWeeklyPlan(input)).toEqual(generateWeeklyPlan(input));
   });
 
-  it('produces 3 days (PPL) for a sedentary user', () => {
+  it('produces 3 muscle-named days for a sedentary user', () => {
     const plan = generateWeeklyPlan({ goalType: 'maintenance', activityLevel: 'sedentary', sex: 'female' });
     expect(plan).toHaveLength(3);
-    expect(plan.map((d) => d.splitType)).toEqual(['push', 'pull', 'legs']);
+    expect(plan.map((d) => d.name)).toEqual(['Chest & Triceps', 'Back & Biceps', 'Legs & Shoulders']);
     expect(plan.map((d) => d.dayOfWeek)).toEqual([1, 3, 5]);
   });
 
-  it('produces a 6-day PPL x2 for a very active user with A/B names', () => {
+  it('names days by muscle group, never abstract Push/Upper', () => {
+    const plan = generateWeeklyPlan({ goalType: 'muscle_gain', activityLevel: 'active', sex: 'male' });
+    expect(plan[0].name).toBe('Chest & Triceps');
+    expect(plan.some((d) => /push|pull|upper|lower/i.test(d.name))).toBe(false);
+  });
+
+  it('produces 6 days for a very active user', () => {
     const plan = generateWeeklyPlan({ goalType: 'muscle_gain', activityLevel: 'very_active', sex: 'male' });
     expect(plan).toHaveLength(6);
-    expect(plan.map((d) => d.name)).toEqual(['Push A', 'Pull A', 'Legs A', 'Push B', 'Pull B', 'Legs B']);
     expect(plan.every((d) => d.targetSets === 4 && d.targetReps === 10)).toBe(true);
   });
 
@@ -39,14 +44,14 @@ describe('generateWeeklyPlan', () => {
     expect(cut[0].targetReps).toBe(15);
   });
 
-  it('adds cardio to lower-body days only for fat-loss goals', () => {
+  it('adds cardio to the leg day only for fat-loss goals', () => {
     const cut = generateWeeklyPlan({ goalType: 'fat_loss', activityLevel: 'active', sex: 'female' });
-    const lower = cut.find((d) => d.splitType === 'lower' || d.splitType === 'legs')!;
-    expect(lower.muscleGroups).toContain('cardio');
+    const legDay = cut.find((d) => d.muscleGroups.includes('legs'))!;
+    expect(legDay.muscleGroups).toContain('cardio');
 
     const gain = generateWeeklyPlan({ goalType: 'muscle_gain', activityLevel: 'active', sex: 'female' });
-    const legs = gain.find((d) => d.splitType === 'legs')!;
-    expect(legs.muscleGroups).not.toContain('cardio');
+    const gainLegDay = gain.find((d) => d.muscleGroups.includes('legs'))!;
+    expect(gainLegDay.muscleGroups).not.toContain('cardio');
   });
 
   it('gives different users different plans', () => {
