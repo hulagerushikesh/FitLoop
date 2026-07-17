@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Check, ChevronRight, Dumbbell, Plus, Sparkles } from 'lucide-react-native';
+import { Check, ChevronRight, Dumbbell, Pencil, Plus, Sparkles } from 'lucide-react-native';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
@@ -129,6 +129,13 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
                 onPress={() => navigation.navigate('WorkoutSession', { workoutId: pick.id })}
                 style={styles.todayButton}
               />
+              <Pressable
+                style={styles.editExercises}
+                onPress={() => navigation.navigate('RoutineBuilder', { workoutId: pick.id })}
+              >
+                <Pencil size={14} color={t.colors.accentEmphasis} />
+                <Text style={styles.editExercisesText}>Edit or swap exercises</Text>
+              </Pressable>
             </>
           ) : (
             <Text style={styles.restText}>Rest day — nothing scheduled.</Text>
@@ -172,7 +179,7 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
         {/* ---- Browse the full exercise list ---- */}
         <Pressable style={styles.libraryButton} onPress={() => navigation.navigate('ExerciseLibrary', undefined)}>
           <Dumbbell size={18} color={t.colors.accentEmphasis} />
-          <Text style={styles.libraryButtonText}>Browse all exercises</Text>
+          <Text style={styles.libraryButtonText}>Browse & search all exercises</Text>
           <ChevronRight size={16} color={t.colors.textTertiary} style={styles.libraryChevron} />
         </Pressable>
 
@@ -267,6 +274,15 @@ function createStyles(t: Theme) {
     groupRow: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs, justifyContent: 'center', marginTop: t.spacing.md },
     groupChip: { minHeight: 30, paddingVertical: 2 },
     todayButton: { marginTop: t.spacing.lg },
+    editExercises: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      marginTop: t.spacing.md,
+      paddingVertical: t.spacing.xs,
+    },
+    editExercisesText: { ...t.typography.caption, color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
     chooseToggle: {
       flexDirection: 'row',
       alignItems: 'center',

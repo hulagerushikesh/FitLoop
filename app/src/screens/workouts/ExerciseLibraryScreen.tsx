@@ -21,6 +21,7 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
   const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
   const selectMode = route.params?.selectMode ?? false;
+  const returnScreen = route.params?.returnScreen ?? 'RoutineBuilder';
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,11 +62,19 @@ export default function ExerciseLibraryScreen({ navigation, route }: Props) {
 
   const onPressRow = (exercise: Exercise) => {
     if (selectMode) {
-      navigation.navigate({
-        name: 'RoutineBuilder',
-        params: { selectedExerciseId: exercise.id },
-        merge: true,
-      });
+      if (returnScreen === 'WorkoutSession' && route.params?.workoutId) {
+        navigation.navigate({
+          name: 'WorkoutSession',
+          params: { workoutId: route.params.workoutId, addedExerciseId: exercise.id },
+          merge: true,
+        });
+      } else {
+        navigation.navigate({
+          name: 'RoutineBuilder',
+          params: { selectedExerciseId: exercise.id },
+          merge: true,
+        });
+      }
     } else {
       navigation.navigate('ExerciseDetail', { exerciseId: exercise.id });
     }

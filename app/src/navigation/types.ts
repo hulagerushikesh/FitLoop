@@ -38,10 +38,10 @@ export type NutritionStackParamList = {
 
 export type WorkoutsStackParamList = {
   WorkoutsHome: undefined;
-  ExerciseLibrary: { selectMode?: boolean } | undefined;
+  ExerciseLibrary: { selectMode?: boolean; returnScreen?: 'RoutineBuilder' | 'WorkoutSession'; workoutId?: string } | undefined;
   ExerciseDetail: { exerciseId: string };
   RoutineBuilder: { workoutId?: string; selectedExerciseId?: string; initialDayOfWeek?: number } | undefined;
-  WorkoutSession: { workoutId: string };
+  WorkoutSession: { workoutId: string; addedExerciseId?: string };
 };
 
 export type ProfileStackParamList = {

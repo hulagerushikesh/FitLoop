@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Disc3, Mic, Repeat2, TrendingUp } from 'lucide-react-native';
+import { Disc3, Mic, Plus, Repeat2, TrendingUp } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
@@ -47,7 +47,7 @@ import { Badge, Button, Card, Chip, NumberInput, useToast } from '../../componen
 import ScreenContainer from '../../components/ScreenContainer';
 import { DEFAULT_REST_SECONDS } from '../../constants/workoutTemplates';
 import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
-import type { SetType, WorkoutLog, WorkoutSession } from '../../types/database';
+import type { Exercise, SetType, WorkoutLog, WorkoutSession } from '../../types/database';
 
 type Props = NativeStackScreenProps<WorkoutsStackParamList, 'WorkoutSession'>;
 
@@ -307,7 +307,7 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [finishing, setFinishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [library, setLibrary] = useState<{ id: string; name: string }[]>([]);
+  const [library, setLibrary] = useState<Exercise[]>([]);
   const [voiceResult, setVoiceResult] = useState<VoiceBatch | null>(null);
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
 
@@ -324,7 +324,7 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
       setRoutineName(routine.name);
       setRoutineExercises(exercises);
       setBodyWeightKg(weight);
-      setLibrary(allExercises.map((e) => ({ id: e.id, name: e.name })));
+      setLibrary(allExercises);
 
       const activeSession = await fetchActiveSession(user.id, workoutId);
       const currentSession = activeSession ?? (await startSession(user.id, workoutId, routine.name));
@@ -364,6 +364,44 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to start session'))
       .finally(() => setLoading(false));
   }, [user, workoutId]);
+
+  // Add an exercise picked from the library mid-session — it becomes a normal
+  // log card (not saved to the routine), so the user isn't boxed into the plan.
+  useEffect(() => {
+    const addedId = route.params?.addedExerciseId;
+    if (!addedId || !user || !session) return;
+    navigation.setParams({ addedExerciseId: undefined });
+    if (routineExercises.some((re) => re.exercise.id === addedId)) {
+      showToast('That exercise is already in this workout', 'info');
+      return;
+    }
+    const exercise = library.find((e) => e.id === addedId);
+    if (!exercise) return;
+
+    const syntheticRow: RoutineExerciseRow = {
+      id: `adhoc:${exercise.id}`,
+      workout_id: workoutId,
+      exercise_id: exercise.id,
+      order_index: routineExercises.length,
+      target_sets: 3,
+      target_reps: 10,
+      superset_group: null,
+      created_at: new Date().toISOString(),
+      exercise,
+    };
+    setRoutineExercises((prev) => [...prev, syntheticRow]);
+
+    // Pull in last-time + PR context so the added card behaves like the rest.
+    Promise.all([
+      fetchLastSessionSets(user.id, exercise.id, session.id),
+      fetchHistoricalSets(user.id, exercise.id, session.id).then(bestEstimatedOneRepMax),
+    ])
+      .then(([last, best]) => {
+        setLastSetsByExercise((prev) => ({ ...prev, [exercise.id]: last }));
+        setBest1RmByExercise((prev) => ({ ...prev, [exercise.id]: best }));
+      })
+      .catch(() => {});
+  }, [route.params?.addedExerciseId, user, session, library, routineExercises, workoutId]);
 
   // Superset labels: exercises sharing a superset_group get "Superset A/B/…".
   const supersetLabels = useMemo(() => {
@@ -514,6 +552,16 @@ export default function WorkoutSessionScreen({ route, navigation }: Props) {
             />
           ))}
 
+          <Pressable
+            style={styles.addExerciseButton}
+            onPress={() =>
+              navigation.navigate('ExerciseLibrary', { selectMode: true, returnScreen: 'WorkoutSession', workoutId })
+            }
+          >
+            <Plus size={18} color={t.colors.accentEmphasis} />
+            <Text style={styles.addExerciseText}>Add an exercise</Text>
+          </Pressable>
+
           <Button
             label="Finish workout"
             onPress={onFinish}
@@ -598,6 +646,20 @@ function createStyles(t: Theme) {
     },
     logButtonDisabled: { opacity: 0.4 },
     logButtonText: { color: t.colors.onAccent, fontFamily: FONTS.bold },
+    addExerciseButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.spacing.xs,
+      marginTop: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      borderRadius: t.radii.lg,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.surface,
+    },
+    addExerciseText: { ...t.typography.bodyBold, color: t.colors.accentEmphasis },
     finishButton: { marginTop: t.spacing.xl },
     voiceRow: {
       flexDirection: 'row',
