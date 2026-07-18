@@ -7,7 +7,8 @@ export type NotifKey =
   | 'workoutReminder'
   | 'weeklyRecap'
   | 'streakWarning'
-  | 'progressPhoto';
+  | 'progressPhoto'
+  | 'waterReminder';
 
 export interface DailyPlan {
   kind: 'daily';
@@ -72,6 +73,24 @@ export function plansFor(key: NotifKey, trainingWeekdays: number[] = []): NotifP
           minute: 30,
           title: 'Progress photo time 📸',
           body: 'Snap a quick daily photo to see your progress add up.',
+        },
+      ];
+    case 'waterReminder':
+      // Two gentle nudges across the day so hydration doesn't slip.
+      return [
+        {
+          kind: 'daily',
+          hour: 11,
+          minute: 0,
+          title: 'Hydration check 💧',
+          body: 'Grab a glass of water — a few sips keep you on track.',
+        },
+        {
+          kind: 'daily',
+          hour: 16,
+          minute: 0,
+          title: 'Hydration check 💧',
+          body: 'Afternoon slump? Water helps — log a glass.',
         },
       ];
     case 'weeklyRecap':

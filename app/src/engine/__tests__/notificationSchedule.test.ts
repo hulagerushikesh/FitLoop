@@ -24,6 +24,13 @@ describe('plansFor', () => {
     expect(photo[0]).toMatchObject({ kind: 'daily', hour: 8, minute: 30 });
   });
 
+  it('schedules two daily plans for the water reminder', () => {
+    const water = plansFor('waterReminder');
+    expect(water).toHaveLength(2);
+    expect(water.map((p) => (p.kind === 'daily' ? p.hour : -1))).toEqual([11, 16]);
+    expect(water.every((p) => p.kind === 'daily')).toBe(true);
+  });
+
   it('schedules a weekly Monday plan for the recap', () => {
     const recap = plansFor('weeklyRecap');
     expect(recap).toEqual([

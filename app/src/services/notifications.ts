@@ -15,6 +15,7 @@ export const NOTIF_KEYS: NotifKey[] = [
   'weeklyRecap',
   'streakWarning',
   'progressPhoto',
+  'waterReminder',
 ];
 
 /** AsyncStorage key holding the on/off intent for a preference. */
