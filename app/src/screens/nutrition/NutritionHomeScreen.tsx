@@ -5,9 +5,12 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Camera, GlassWater, History, Minus, Plus, Sparkles, Trash2, UtensilsCrossed } from 'lucide-react-native';
 import type { NutritionStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
+import { useProfile } from '../../hooks/useProfile';
 import { fetchDailyLogs, deleteFoodLog } from '../../services/nutrition';
 import { addWater, fetchTodayWaterMl, removeLastWater } from '../../services/water';
 import { fetchLatestGoal } from '../../services/goals';
+import { fetchLatestWeight } from '../../services/profile';
+import { computeWaterGoalMl, hydrationProgress } from '../../engine/hydration';
 import ScreenContainer from '../../components/ScreenContainer';
 import { Button, Card, CountUp, ProgressRing, SkeletonCard } from '../../components/ui';
 import ProgressBar from '../../components/ProgressBar';
@@ -28,9 +31,11 @@ export default function NutritionHomeScreen({ navigation }: Props) {
   const t = useTheme();
   const styles = useThemedStyles(createStyles);
   const { user } = useAuth();
+  const { profile } = useProfile();
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [waterMl, setWaterMl] = useState(0);
+  const [weightKg, setWeightKg] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,11 +46,13 @@ export default function NutritionHomeScreen({ navigation }: Props) {
       fetchDailyLogs(user.id),
       fetchLatestGoal(user.id),
       fetchTodayWaterMl(user.id).catch(() => 0),
+      fetchLatestWeight(user.id).catch(() => null),
     ])
-      .then(([l, g, w]) => {
+      .then(([l, g, w, weight]) => {
         setLogs(l);
         setGoal(g);
         setWaterMl(w);
+        setWeightKg(weight);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load nutrition log'))
       .finally(() => setLoading(false));
@@ -80,6 +87,12 @@ export default function NutritionHomeScreen({ navigation }: Props) {
       ),
     [logs]
   );
+
+  const waterGoalMl = useMemo(
+    () => computeWaterGoalMl(weightKg, profile?.activity_level ?? null),
+    [weightKg, profile?.activity_level]
+  );
+  const waterReached = waterMl >= waterGoalMl;
 
   const grouped = useMemo(() => {
     const groups: Record<MealType, FoodLog[]> = { breakfast: [], lunch: [], dinner: [], snack: [] };
@@ -163,9 +176,27 @@ export default function NutritionHomeScreen({ navigation }: Props) {
               <Text style={styles.waterTitle}>Water</Text>
             </View>
             <Text style={styles.waterTotal}>
-              {(waterMl / 1000).toFixed(waterMl >= 1000 ? 1 : 2)} L
+              {(waterMl / 1000).toFixed(waterMl >= 1000 ? 1 : 2)}
+              <Text style={styles.waterGoal}> / {(waterGoalMl / 1000).toFixed(1)} L</Text>
             </Text>
           </View>
+
+          <View style={styles.waterBarWrap}>
+            <View style={styles.waterBarTrack}>
+              <View
+                style={[
+                  styles.waterBarFill,
+                  { width: `${hydrationProgress(waterMl, waterGoalMl) * 100}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.waterHint}>
+              {waterReached
+                ? '🎉 Goal reached — nice hydration today'
+                : `${((waterGoalMl - waterMl) / 1000).toFixed(1)} L to go`}
+            </Text>
+          </View>
+
           <View style={styles.waterButtons}>
             {[250, 500, 750].map((ml) => (
               <Pressable key={ml} style={styles.waterAdd} onPress={() => onAddWater(ml)}>
@@ -246,6 +277,16 @@ function createStyles(t: Theme) {
   waterTitleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
   waterTitle: { ...t.typography.h3, color: t.colors.textPrimary },
   waterTotal: { ...t.typography.statSmall, color: t.colors.water },
+  waterGoal: { ...t.typography.caption, color: t.colors.textTertiary, fontFamily: FONTS.bold },
+  waterBarWrap: { marginTop: t.spacing.md },
+  waterBarTrack: {
+    height: 8,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.surfaceElevated,
+    overflow: 'hidden',
+  },
+  waterBarFill: { height: 8, borderRadius: t.radii.full, backgroundColor: t.colors.water },
+  waterHint: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.xs },
   waterButtons: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.md, alignItems: 'center' },
   waterAdd: {
     flexDirection: 'row',

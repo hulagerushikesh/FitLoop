@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { Camera, Calendar, CheckCircle2, Circle, Dumbbell, Flame, UtensilsCrossed } from 'lucide-react-native';
+import { Camera, Calendar, CheckCircle2, Circle, Dumbbell, Flame, GlassWater, Plus, UtensilsCrossed } from 'lucide-react-native';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
@@ -10,6 +10,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
 import { addFoodLog, fetchDailyLogs, fetchRecentSummary } from '../../services/nutrition';
 import { captureDailyProgressPhoto, fetchProgressPhotoMap } from '../../services/analytics';
+import { addWater, fetchTodayWaterMl } from '../../services/water';
+import { fetchLatestWeight } from '../../services/profile';
+import { computeWaterGoalMl, hydrationProgress } from '../../engine/hydration';
 import { fetchLatestGoal } from '../../services/goals';
 import {
   fetchExerciseLibrary,
@@ -26,7 +29,7 @@ import VoiceConfirmModal, { type CommitItem } from '../../components/voice/Voice
 import type { VoiceBatch } from '../../engine/voiceLogParsing';
 import ProgressBar from '../../components/ProgressBar';
 import { loggingStreak } from '../../engine/analytics';
-import { Theme, useTheme, useThemedStyles } from '../../theme';
+import { FONTS, Theme, useTheme, useThemedStyles } from '../../theme';
 import type { FoodLog, Goal, Workout } from '../../types/database';
 import {
   computeRecoveryStates,
@@ -64,6 +67,8 @@ export default function HomeScreen({ navigation }: Props) {
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [photoDoneToday, setPhotoDoneToday] = useState(false);
   const [capturingPhoto, setCapturingPhoto] = useState(false);
+  const [waterMl, setWaterMl] = useState(0);
+  const [weightKg, setWeightKg] = useState<number | null>(null);
 
   const load = useCallback(() => {
     if (!user) return;
@@ -77,12 +82,16 @@ export default function HomeScreen({ navigation }: Props) {
       fetchRecentSummary(user.id, 40).catch(() => []),
       fetchExerciseLibrary(user.id).catch(() => []),
       fetchProgressPhotoMap(user.id, todayString(), todayString()).catch(() => ({})),
+      fetchTodayWaterMl(user.id).catch(() => 0),
+      fetchLatestWeight(user.id).catch(() => null),
     ])
-      .then(([l, g, routines, fatigue, routineGroups, recent, exercises, todayPhotos]) => {
+      .then(([l, g, routines, fatigue, routineGroups, recent, exercises, todayPhotos, water, weight]) => {
         setLogs(l);
         setGoal(g);
         setLibrary(exercises.map((e) => ({ id: e.id, name: e.name })));
         setPhotoDoneToday(Object.keys(todayPhotos).length > 0);
+        setWaterMl(water);
+        setWeightKg(weight);
         setTodayRoutine(routines.find((r) => r.day_of_week === TODAY_WEEKDAY) ?? null);
         const states = computeRecoveryStates(fatigue, new Date());
         setRecoveryStates(states);
@@ -114,6 +123,22 @@ export default function HomeScreen({ navigation }: Props) {
 
   const firstName = profile?.full_name?.split(' ')[0] ?? user?.email?.split('@')[0] ?? 'there';
   const remaining = goal ? Math.max(0, goal.calorie_target - totals.calories) : null;
+
+  const waterGoalMl = useMemo(
+    () => computeWaterGoalMl(weightKg, profile?.activity_level ?? null),
+    [weightKg, profile?.activity_level]
+  );
+
+  const onAddWater = async (ml: number) => {
+    if (!user) return;
+    setWaterMl((w) => w + ml); // optimistic
+    try {
+      await addWater(user.id, ml);
+    } catch (e) {
+      setWaterMl((w) => Math.max(0, w - ml));
+      showToast(e instanceof Error ? e.message : 'Failed to log water', 'error');
+    }
+  };
 
   const closeVoice = () => {
     setVoiceModalVisible(false);
@@ -313,6 +338,38 @@ export default function HomeScreen({ navigation }: Props) {
             </Text>
           </View>
         </Pressable>
+
+        <Card style={styles.waterCard}>
+          <View style={styles.waterHeader}>
+            <View style={styles.waterTitleRow}>
+              <GlassWater size={18} color={t.colors.water} />
+              <Text style={styles.waterTitle}>Water</Text>
+            </View>
+            <Text style={styles.waterTotal}>
+              {(waterMl / 1000).toFixed(waterMl >= 1000 ? 1 : 2)}
+              <Text style={styles.waterGoal}> / {(waterGoalMl / 1000).toFixed(1)} L</Text>
+            </Text>
+          </View>
+          <View style={styles.waterBarTrack}>
+            <View
+              style={[styles.waterBarFill, { width: `${hydrationProgress(waterMl, waterGoalMl) * 100}%` }]}
+            />
+          </View>
+          <View style={styles.waterButtons}>
+            {[250, 500].map((ml) => (
+              <Pressable key={ml} style={styles.waterAdd} onPress={() => onAddWater(ml)}>
+                <Plus size={14} color={t.colors.water} />
+                <Text style={styles.waterAddText}>{ml}ml</Text>
+              </Pressable>
+            ))}
+            <Pressable
+              style={styles.waterMore}
+              onPress={() => navigation.navigate('Nutrition', { screen: 'NutritionHome' })}
+            >
+              <Text style={styles.waterMoreText}>More in Nutrition</Text>
+            </Pressable>
+          </View>
+        </Card>
       </ScrollView>
 
       <View style={styles.fabContainer} pointerEvents="box-none">
@@ -425,5 +482,34 @@ function createStyles(t: Theme) {
   photoText: { flex: 1, minWidth: 0 },
   photoTitle: { ...t.typography.bodyBold, color: t.colors.textPrimary },
   photoSubtitle: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: 2 },
+  waterCard: { marginTop: t.spacing.md },
+  waterHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  waterTitleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
+  waterTitle: { ...t.typography.h3, color: t.colors.textPrimary },
+  waterTotal: { ...t.typography.statSmall, color: t.colors.water },
+  waterGoal: { ...t.typography.caption, color: t.colors.textTertiary, fontFamily: FONTS.bold },
+  waterBarTrack: {
+    height: 8,
+    borderRadius: t.radii.full,
+    backgroundColor: t.colors.surfaceElevated,
+    overflow: 'hidden',
+    marginTop: t.spacing.md,
+  },
+  waterBarFill: { height: 8, borderRadius: t.radii.full, backgroundColor: t.colors.water },
+  waterButtons: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.md, alignItems: 'center' },
+  waterAdd: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surfaceElevated,
+    borderRadius: t.radii.full,
+    paddingHorizontal: t.spacing.md,
+    minHeight: 40,
+  },
+  waterAddText: { ...t.typography.bodySmall, fontFamily: FONTS.bold, color: t.colors.textPrimary },
+  waterMore: { marginLeft: 'auto', paddingHorizontal: t.spacing.sm, minHeight: 40, justifyContent: 'center' },
+  waterMoreText: { ...t.typography.caption, color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
 });
 }
