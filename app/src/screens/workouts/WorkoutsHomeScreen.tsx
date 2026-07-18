@@ -2,11 +2,12 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
-import { Check, ChevronRight, Dumbbell, Pencil, Plus, Sparkles } from 'lucide-react-native';
+import { Check, ChevronRight, Dumbbell, Pencil, Plus, RefreshCw, Sparkles } from 'lucide-react-native';
 import type { WorkoutsStackParamList } from '../../navigation/types';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../hooks/useProfile';
-import { fetchRoutines, fetchRoutineMuscleGroups, seedPersonalizedPlan } from '../../services/workouts';
+import { fetchRoutines, fetchRoutineMuscleGroups, seedPersonalizedPlan, regeneratePersonalizedPlan } from '../../services/workouts';
+import { confirm } from '../../utils/confirm';
 import { DAY_LABELS, DAY_LABELS_SHORT, MUSCLE_GROUP_OPTIONS } from '../../constants/workoutTemplates';
 import ScreenContainer from '../../components/ScreenContainer';
 import BodyDiagram from '../../components/BodyDiagram';
@@ -29,6 +30,7 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
   const [groupsByRoutine, setGroupsByRoutine] = useState<Map<string, MuscleGroup[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickId, setPickId] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
@@ -67,6 +69,8 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
   );
   const pickGroups = pick ? groupsByRoutine.get(pick.id) ?? [] : [];
 
+  const canPlan = !!(user && profile?.goal_type && profile?.activity_level && profile?.sex);
+
   const onGeneratePlan = async () => {
     if (!user || !profile?.goal_type || !profile?.activity_level || !profile?.sex) return;
     setSeeding(true);
@@ -82,6 +86,33 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
       setError(e instanceof Error ? e.message : 'Failed to generate your plan');
     } finally {
       setSeeding(false);
+    }
+  };
+
+  const onRegeneratePlan = async () => {
+    if (!user || !profile?.goal_type || !profile?.activity_level || !profile?.sex) return;
+    const ok = await confirm({
+      title: 'Regenerate weekly plan?',
+      message:
+        'This replaces your current routines with a fresh plan built from your goal and activity level. Your logged workout history is kept.',
+      confirmLabel: 'Regenerate',
+      destructive: true,
+    });
+    if (!ok) return;
+    setRegenerating(true);
+    setError(null);
+    try {
+      await regeneratePersonalizedPlan(user.id, {
+        goalType: profile.goal_type,
+        activityLevel: profile.activity_level,
+        sex: profile.sex,
+      });
+      setPickId(null);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to regenerate your plan');
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -212,6 +243,19 @@ export default function WorkoutsHomeScreen({ navigation }: Props) {
           <Text style={styles.editHint}>Tap any day to edit it, swap exercises, or reschedule — nothing's locked in.</Text>
         ) : null}
 
+        {routines.length > 0 && canPlan ? (
+          <Pressable
+            style={[styles.regenButton, regenerating && styles.regenButtonBusy]}
+            onPress={onRegeneratePlan}
+            disabled={regenerating}
+          >
+            <RefreshCw size={15} color={t.colors.accentEmphasis} />
+            <Text style={styles.regenText}>
+              {regenerating ? 'Regenerating…' : 'Regenerate plan from my profile'}
+            </Text>
+          </Pressable>
+        ) : null}
+
         {routines.length === 0 ? (
           <Button
             label="Generate my personalized plan"
@@ -317,7 +361,22 @@ function createStyles(t: Theme) {
     },
     libraryButtonText: { ...t.typography.bodyBold, color: t.colors.textPrimary, flex: 1 },
     libraryChevron: {},
-    editHint: { ...t.typography.caption, color: t.colors.textTertiary, marginBottom: t.spacing.lg },
+    editHint: { ...t.typography.caption, color: t.colors.textTertiary, marginBottom: t.spacing.md },
+    regenButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.spacing.xs,
+      marginBottom: t.spacing.lg,
+      paddingVertical: t.spacing.md,
+      borderRadius: t.radii.lg,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: t.colors.border,
+      backgroundColor: t.colors.surface,
+    },
+    regenButtonBusy: { opacity: 0.6 },
+    regenText: { ...t.typography.caption, color: t.colors.accentEmphasis, fontFamily: FONTS.bold },
     weekCard: { padding: 0, marginBottom: t.spacing.lg, overflow: 'hidden' },
     weekRow: {
       flexDirection: 'row',

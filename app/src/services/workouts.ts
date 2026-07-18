@@ -236,6 +236,18 @@ export async function seedPersonalizedPlan(userId: string, input: WeeklyPlanInpu
   }
 }
 
+/**
+ * Replaces the user's current routines with a freshly generated personalized
+ * plan. Safe for history: deleting a workout only cascades to its exercise list
+ * (workout_exercises); logged sessions keep their rows because
+ * workout_sessions.workout_id is ON DELETE SET NULL.
+ */
+export async function regeneratePersonalizedPlan(userId: string, input: WeeklyPlanInput): Promise<void> {
+  const { error } = await supabase.from('workouts').delete().eq('user_id', userId);
+  if (error) throw error;
+  await seedPersonalizedPlan(userId, input);
+}
+
 export async function startSession(
   userId: string,
   workoutId: string | null,
