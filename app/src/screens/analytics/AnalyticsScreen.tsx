@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   Activity,
   BarChart3,
+  Droplet,
   Dumbbell,
   Flame,
   Ruler,
@@ -192,6 +193,28 @@ export default function AnalyticsScreen() {
     return { streak, workouts, burned, thisWeekVol, adherence };
   }, [summaries, volumeWeeks, goal]);
 
+  // ---- Derived hydration (last 7 days, oldest→newest, UTC keys) ------------
+  const hydration = useMemo(() => {
+    const WD = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const byDay = new Map(summaries.map((s) => [s.day, s.water_ml ?? 0]));
+    const base = new Date();
+    const days: { label: string; ml: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({ label: WD[d.getUTCDay()], ml: byDay.get(key) ?? 0 });
+    }
+    const logged = days.filter((d) => d.ml > 0);
+    const avgMl = logged.length ? Math.round(logged.reduce((s, d) => s + d.ml, 0) / logged.length) : 0;
+    return { days, avgMl, anyLogged: logged.length > 0 };
+  }, [summaries]);
+
+  const hydrationBars: StackedBar[] = useMemo(
+    () => hydration.days.map((d) => ({ label: d.label, segments: { water: d.ml } })),
+    [hydration]
+  );
+
   // ---- Derived strength 1RM series ----------------------------------------
   const oneRmSeries = useMemo(
     () => exerciseHistory.map((h) => estimateOneRepMax(h.bestWeightKg, h.bestReps)),
@@ -319,6 +342,30 @@ export default function AnalyticsScreen() {
             styles={styles}
           />
         </View>
+
+        {/* ---- Hydration ---- */}
+        <Text style={styles.sectionTitle}>Hydration</Text>
+        <Card style={styles.card}>
+          {hydration.anyLogged ? (
+            <>
+              <Text style={styles.hydrationAvg}>
+                {(hydration.avgMl / 1000).toFixed(1)} L
+                <Text style={styles.hydrationAvgLabel}>  avg / logged day</Text>
+              </Text>
+              <View style={styles.hydrationChart}>
+                <StackedBarChart
+                  bars={hydrationBars}
+                  segmentOrder={['water']}
+                  colors={{ water: t.colors.water }}
+                  height={140}
+                  formatTotal={(v) => `${(v / 1000).toFixed(1)}L`}
+                />
+              </View>
+            </>
+          ) : (
+            <EmptyState icon={Droplet} title="No water logged yet" message="Add water from the Home or Nutrition tab to see your hydration trend." />
+          )}
+        </Card>
 
         {/* ---- Strength progress ---- */}
         <Text style={styles.sectionTitle}>Strength progress</Text>
@@ -580,6 +627,9 @@ function createStyles(t: Theme) {
       marginBottom: t.spacing.md,
     },
     card: { gap: t.spacing.sm },
+    hydrationAvg: { ...t.typography.statSmall, color: t.colors.water },
+    hydrationAvgLabel: { ...t.typography.caption, color: t.colors.textSecondary },
+    hydrationChart: { marginTop: t.spacing.sm },
     recapGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.md },
     recapTile: {
       flexGrow: 1,

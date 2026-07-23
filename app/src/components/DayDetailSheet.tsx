@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Camera, Dumbbell, Flame, UtensilsCrossed, X } from 'lucide-react-native';
+import { Camera, Dumbbell, Flame, GlassWater, UtensilsCrossed, X } from 'lucide-react-native';
 import { useAuth } from '../hooks/useAuth';
 import { fetchSessionsForDate } from '../services/calendar';
 import { signedProgressPhotoUrl } from '../services/analytics';
@@ -114,6 +114,13 @@ export default function DayDetailSheet({
               value={`${summary?.protein_g ?? 0}g`}
               label="protein"
               valueColor={t.colors.protein}
+              styles={styles}
+            />
+            <Stat
+              icon={<GlassWater size={18} color={t.colors.water} />}
+              value={`${((summary?.water_ml ?? 0) / 1000).toFixed(1)}L`}
+              label="water"
+              valueColor={t.colors.water}
               styles={styles}
             />
           </View>
