@@ -26,6 +26,7 @@ import {
   type Trend,
 } from '../../engine/analytics';
 import { estimateOneRepMax } from '../../engine/oneRepMax';
+import { computeWaterGoalMl } from '../../engine/hydration';
 import { ACHIEVEMENTS } from '../../engine/achievements';
 import {
   addProgressPhoto,
@@ -215,6 +216,16 @@ export default function AnalyticsScreen() {
     [hydration]
   );
 
+  const waterGoalMl = useMemo(() => {
+    const latestWeight = weights.length ? weights[weights.length - 1].weight_kg : null;
+    return computeWaterGoalMl(latestWeight, profile?.activity_level ?? null);
+  }, [weights, profile?.activity_level]);
+
+  const hydrationOnTarget = useMemo(
+    () => hydration.days.filter((d) => d.ml >= waterGoalMl).length,
+    [hydration, waterGoalMl]
+  );
+
   // ---- Derived strength 1RM series ----------------------------------------
   const oneRmSeries = useMemo(
     () => exerciseHistory.map((h) => estimateOneRepMax(h.bestWeightKg, h.bestReps)),
@@ -350,7 +361,9 @@ export default function AnalyticsScreen() {
             <>
               <Text style={styles.hydrationAvg}>
                 {(hydration.avgMl / 1000).toFixed(1)} L
-                <Text style={styles.hydrationAvgLabel}>  avg / logged day</Text>
+                <Text style={styles.hydrationAvgLabel}>
+                  {'  '}avg / logged day · goal {(waterGoalMl / 1000).toFixed(1)} L
+                </Text>
               </Text>
               <View style={styles.hydrationChart}>
                 <StackedBarChart
@@ -361,6 +374,9 @@ export default function AnalyticsScreen() {
                   formatTotal={(v) => `${(v / 1000).toFixed(1)}L`}
                 />
               </View>
+              <Text style={styles.hydrationTarget}>
+                {hydrationOnTarget} of 7 days on target 💧
+              </Text>
             </>
           ) : (
             <EmptyState icon={Droplet} title="No water logged yet" message="Add water from the Home or Nutrition tab to see your hydration trend." />
@@ -630,6 +646,7 @@ function createStyles(t: Theme) {
     hydrationAvg: { ...t.typography.statSmall, color: t.colors.water },
     hydrationAvgLabel: { ...t.typography.caption, color: t.colors.textSecondary },
     hydrationChart: { marginTop: t.spacing.sm },
+    hydrationTarget: { ...t.typography.caption, color: t.colors.textSecondary, marginTop: t.spacing.xs },
     recapGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.md },
     recapTile: {
       flexGrow: 1,
